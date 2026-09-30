@@ -1,0 +1,13 @@
+# Blender 3.3.1 MTL File: 'Buildings pack3.blend'
+# www.blender.org
+
+newmtl Material
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+illum 1
+map_Kd C:/shop_front17_derelict - copia -UPSCALED.png
+map_d C:/shop_front17_derelict - copia -UPSCALED.png
+map_Bump -bm 0.700000 C:/shop_front17_derelict - copia - NORMAL.png

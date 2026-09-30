@@ -1,0 +1,22 @@
+# Blender 3.3.1 MTL File: 'posteluz.blend'
+# www.blender.org
+
+newmtl Glass
+Ns 611.239624
+Ka 0.777273 0.777273 0.777273
+Ks 0.595455 0.595455 0.595455
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 3
+map_Kd C:/Leds.png
+
+newmtl Metal
+Ns 69.504128
+Ka 0.700000 0.700000 0.700000
+Ks 0.509091 0.509091 0.509091
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 3
+map_Kd C:/Metal_seamless2_ch16.jpg

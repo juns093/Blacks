@@ -1,0 +1,23 @@
+# Blender 3.3.1 MTL File: 'Buildings pack part 2.blend'
+# www.blender.org
+
+newmtl building_dks-1
+Ns 0.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.050000 0.050000 0.050000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd C:/building_dks-1-UPSCALED 2.png
+map_Bump -bm 1.000000 C:/building_dks-1 -UPSCALED - NORMAL-BLURRED.png
+
+newmtl building_dks-1GLASS
+Ns 360.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2

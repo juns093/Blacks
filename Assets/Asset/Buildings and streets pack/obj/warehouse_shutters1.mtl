@@ -1,0 +1,24 @@
+# Blender 3.3.1 MTL File: 'Buildings pack3.blend'
+# www.blender.org
+
+newmtl warehouse_shutters1
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd C:/warehouse_shutters1-copia.png
+map_Bump -bm 1.000000 C:/warehouse_shutters1-copia -NORMAL.png
+
+newmtl warehouse_shutters1.METAL
+Ns 0.000000
+Ka 0.300000 0.300000 0.300000
+Ks 0.300000 0.300000 0.300000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 3
+map_Kd C:/warehouse_shutters1-copia.png
+map_Bump -bm 0.500000 C:/warehouse_shutters1-copia -NORMAL.png

@@ -1,0 +1,13 @@
+# Blender 3.3.1 MTL File: 'Buildings pack3.blend'
+# www.blender.org
+
+newmtl wall_shutter1
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd C:/wall_shutter1.png
+map_Bump -bm 1.000000 C:/wall_shutter1 - NORMAL.png

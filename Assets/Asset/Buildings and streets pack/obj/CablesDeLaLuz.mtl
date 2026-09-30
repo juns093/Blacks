@@ -1,0 +1,32 @@
+# Blender 3.3.1 MTL File: 'posteluz.blend'
+# www.blender.org
+
+newmtl CableYConector
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd C:/WireAndConnector.png
+
+newmtl Madera
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd C:/wood1.jpg
+
+newmtl Metal
+Ns 69.504128
+Ka 0.700000 0.700000 0.700000
+Ks 0.509091 0.509091 0.509091
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 3
+map_Kd C:/Metal_seamless2_ch16.jpg
