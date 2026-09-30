@@ -71,6 +71,12 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
     [Tooltip("이 구간에서 손전등(F키)을 쓸지 여부")]
     [SerializeField] private bool useFlashlight = false;
 
+    [Tooltip("이 구간에서 Shift로 달릴 수 있는지 여부")]
+    [SerializeField] private bool allowRun = false;
+
+    /// <summary>대본 파일(GameSceneStoryDialogues)에서 구간별로 달리기를 켤 때 씁니다.</summary>
+    public void SetAllowRun(bool allow) => allowRun = allow;
+
     [Header("탐색 중 화면 밝기")]
     [Tooltip("테이블 장면용 화면 보정(노출 -2.67, 대비 75)은 걸어 다니기엔 너무 어둡다. " +
              "켜면 탐색하는 동안에만 아래 값으로 바꿨다가 끝나면 되돌립니다.")]
@@ -129,6 +135,30 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
     [Header("목격자 (들키면 처음 자리에서 다시)")]
     [SerializeField] private WitnessPatrol[] witnesses;
     [TextArea] [SerializeField] private string caughtHint = "들켰다...!";
+
+    [Header("목격자에게 불려 세워졌을 때: 변명")]
+    [Tooltip("변명이 통할 확률 (0~1)")]
+    [Range(0f, 1f)] [SerializeField] private float excuseSuccessChance = 0.5f;
+    [Tooltip("켜면 같은 사람에게 두 번째로 걸렸을 때는 변명이 통하지 않는다")]
+    [SerializeField] private bool oneExcusePerWitness = true;
+    [TextArea] [SerializeField] private string spottedLine = "행인: 거기서 뭐해요?";
+    [SerializeField] private string[] excuseOptions =
+    {
+        "차 키를 떨어뜨려서요. 찾고 있었어요.",
+        "그냥 산책하던 중입니다.",
+        "이 근처 사는 사람이에요. 집에 가는 길이고요."
+    };
+    [SerializeField] private string[] excuseSuccessLines =
+    {
+        "행인: ...아, 그래요? 밤길 조심하세요.",
+        "행인: 그렇군요. 괜히 놀랐네."
+    };
+    [SerializeField] private string[] excuseFailLines =
+    {
+        "행인: 거짓말 같은데요... 경찰 부를게요.",
+        "행인: 수상한데. 신고해야겠어요!"
+    };
+    [TextArea] [SerializeField] private string repeatSpottedLine = "행인: 또 당신이에요? 안 되겠네요, 신고할게요.";
 
     [Header("마지막: 추리 질문 (맞혀야 기억이 완성됨)")]
     [SerializeField] private DeductionQuestion deduction;
@@ -228,6 +258,17 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
     /// <summary>
     /// 대본 파일(GameSceneStoryDialogues)에서 안내 문구를 채울 때 씁니다. null인 항목은 그대로 둡니다.
     /// </summary>
+    /// <summary>대본 파일(GameSceneStoryDialogues)에서 목격자 대화를 채울 때 씁니다. null인 항목은 그대로 둡니다.</summary>
+    public void SetExcuseTexts(string spotted = null, string[] options = null, string[] success = null,
+                               string[] fail = null, string repeat = null)
+    {
+        if (spotted != null) spottedLine = spotted;
+        if (options != null && options.Length > 0) excuseOptions = options;
+        if (success != null && success.Length > 0) excuseSuccessLines = success;
+        if (fail != null && fail.Length > 0) excuseFailLines = fail;
+        if (repeat != null) repeatSpottedLine = repeat;
+    }
+
     public void SetAfterCallTexts(string find = null, string back = null)
     {
         if (find != null) afterCallHint = find;
@@ -356,6 +397,7 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
 
         player.gameObject.SetActive(true);
         player.BeginControl(cam);
+        player.SetRunAllowed(allowRun);
 
         FreeRoamFlashlight flashlight = player.GetComponent<FreeRoamFlashlight>();
         if (useFlashlight && flashlight == null)
@@ -372,6 +414,8 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
 
         // 조작 안내는 아래에 잠깐 (WASD를 누르면 사라짐), 목표는 왼쪽 위에.
         string controls = controlsHint;
+        if (allowRun && !string.IsNullOrEmpty(controls) && !controls.Contains("달리기"))
+            controls += "  /  Shift 달리기";
         if (useFlashlight && !string.IsNullOrEmpty(controls) && !controls.Contains("손전등"))
             controls += "  /  F 손전등";
         ObjectiveHUD.Instance.ShowControls(controls);
@@ -382,7 +426,9 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
         if (requiredInteract != null) requiredInteract.ResetState();
         if (witnesses != null) foreach (var w in witnesses) if (w != null) w.Arm();
         caughtPending = false;
+        spottedBy = null;
         WitnessPatrol.OnCaught += HandleCaught;
+        WitnessPatrol.OnSpotted += HandleSpotted;
         var caughtWatcher = StartCoroutine(CaughtWatcher());
 
         // ── 걷다가 걸려 오는 전화 ──
@@ -503,7 +549,10 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
 
         // 목격자는 여기서 멈춘다. (추리 질문 중에 들키면 안 된다)
         WitnessPatrol.OnCaught -= HandleCaught;
+        WitnessPatrol.OnSpotted -= HandleSpotted;
         StopCoroutine(caughtWatcher);
+        spottedBy = null;
+        ExcuseDialogue.Instance.Hide();
         if (witnesses != null) foreach (var w in witnesses) if (w != null) w.Disarm();
 
         // ── 마지막: 추리 질문 (영상 뒤에 묻는 설정이면 여기서는 건너뜀) ──
@@ -615,6 +664,7 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
             cam.transform.SetPositionAndRotation(callFeetPosition + Vector3.up * 1.65f, Quaternion.Euler(0f, callYaw, 0f));
         player.gameObject.SetActive(true);
         player.BeginControl(cam);
+        player.SetRunAllowed(allowRun);
 
         FreeRoamFlashlight flashlight = player.GetComponent<FreeRoamFlashlight>();
         if (useFlashlight && flashlight == null)
@@ -771,12 +821,27 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
 
     // ── 목격자에게 들켰을 때: 암전 → 시작 자리로 → 모은 것(필수 단서)을 원래 자리로 ──
     private bool caughtPending;
+    private WitnessPatrol spottedBy;
     private void HandleCaught(WitnessPatrol who) => caughtPending = true;
+
+    // 한 번에 한 사람하고만 이야기한다. 같은 순간에 다른 사람도 봤다면 그쪽은 없던 일로 한다.
+    private void HandleSpotted(WitnessPatrol who)
+    {
+        if (spottedBy != null || caughtPending) { who.CancelSpot(); return; }
+        spottedBy = who;
+    }
 
     private IEnumerator CaughtWatcher()
     {
         while (true)
         {
+            if (spottedBy != null && !caughtPending)
+            {
+                WitnessPatrol who = spottedBy;
+                yield return ConfrontRoutine(who);
+                spottedBy = null;
+            }
+
             if (caughtPending)
             {
                 caughtPending = false;
@@ -794,6 +859,80 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
             }
             yield return null;
         }
+    }
+
+    // "거기서 뭐해요?" → 변명을 고른다 → excuseSuccessChance 확률로 통한다.
+    //  통하면: 행인은 가던 길을 가고 플레이어는 계속 움직인다.
+    //  안 통하면: 들킨 것으로 처리 (암전 → 처음 자리)
+    private IEnumerator ConfrontRoutine(WitnessPatrol who)
+    {
+        player.InputPaused = true;
+        HideHint();
+        Debug.Log($"[FlashbackFreeRoamSegment] '{who.name}'이(가) 불러 세웠다.");
+
+        yield return TurnPlayerToward(who.Eye, 0.45f);
+
+        ExcuseDialogue ui = ExcuseDialogue.Instance;
+        bool escaped = false;
+
+        if (oneExcusePerWitness && who.ExcuseUsed)
+        {
+            yield return ui.ShowLine(repeatSpottedLine, 2.2f);
+        }
+        else
+        {
+            int chosen = 0;
+            yield return ui.Ask(spottedLine, excuseOptions, i => chosen = i);
+
+            // 고른 변명을 주인공의 말로 한 번 보여 준다. (주인공 대사는 이름표 없이)
+            if (excuseOptions != null && chosen >= 0 && chosen < excuseOptions.Length)
+                yield return ui.ShowLine(excuseOptions[chosen], 1.4f);
+
+            who.MarkExcuseUsed();
+            escaped = Random.value < excuseSuccessChance;
+            Debug.Log($"[FlashbackFreeRoamSegment] 변명 {(escaped ? "성공" : "실패")} (확률 {excuseSuccessChance:P0})");
+
+            string[] pool = escaped ? excuseSuccessLines : excuseFailLines;
+            string reply = (pool != null && pool.Length > 0) ? pool[Random.Range(0, pool.Length)] : "";
+            if (!string.IsNullOrEmpty(reply))
+                yield return ui.ShowLine(reply, 2f);
+        }
+
+        ui.Hide();
+
+        if (escaped)
+        {
+            who.Forgive();
+            if (!string.IsNullOrEmpty(currentStepHint)) SetStep(currentStepHint);
+            player.InputPaused = false;
+        }
+        else
+        {
+            // OnCaught → caughtPending. 아래 CaughtWatcher가 이어서 처음 자리로 되돌린다.
+            who.ReportCaught();
+        }
+    }
+
+    // 말을 건 사람 쪽으로 고개를 돌린다.
+    private IEnumerator TurnPlayerToward(Vector3 target, float duration)
+    {
+        player.GetLook(out float fromYaw, out float fromPitch);
+        Vector3 dir = target - player.Head.position;
+        if (dir.sqrMagnitude < 0.0001f) yield break;
+
+        float toYaw = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
+        float toPitch = -Mathf.Atan2(dir.y, new Vector2(dir.x, dir.z).magnitude) * Mathf.Rad2Deg;
+        toYaw = fromYaw + Mathf.DeltaAngle(fromYaw, toYaw);
+
+        float t = 0f;
+        while (t < duration)
+        {
+            t += Time.deltaTime;
+            float k = Mathf.SmoothStep(0f, 1f, t / duration);
+            player.SetLook(Mathf.Lerp(fromYaw, toYaw, k), Mathf.Lerp(fromPitch, toPitch, k));
+            yield return null;
+        }
+        player.SetLook(toYaw, toPitch);
     }
 
     private static float FlatDistance(Vector3 a, Vector3 b)

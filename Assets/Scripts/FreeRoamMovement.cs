@@ -15,6 +15,12 @@ public class FreeRoamMovement : MonoBehaviour
     [Tooltip("걷는 속도 (초당 유닛)")]
     [SerializeField] private float walkSpeed = 5.5f;
 
+    [Tooltip("Shift를 누르고 달릴 때 속도 (초당 유닛). 달리기는 탐색 구간이 허용할 때만 됩니다.")]
+    [SerializeField] private float runSpeed = 9.5f;
+
+    [Tooltip("걷기↔달리기 속도가 바뀌는 빠르기")]
+    [SerializeField] private float speedChangeRate = 8f;
+
     [Tooltip("중력 가속도. 바닥에 붙어 있게 해줍니다.")]
     [SerializeField] private float gravity = -9.81f;
 
@@ -64,6 +70,19 @@ public class FreeRoamMovement : MonoBehaviour
     private float stepAccum;
 
     public bool IsControlling => controlling;
+
+    // 이 구간에서 달리기를 쓸 수 있는지 (FlashbackFreeRoamSegment가 정한다)
+    private bool runAllowed = false;
+    private float currentSpeed;
+
+    /// <summary>지금 Shift를 누르고 실제로 움직이며 달리는 중인지. (목격자가 발소리를 듣는 데 씀)</summary>
+    public bool IsRunning { get; private set; }
+
+    public void SetRunAllowed(bool allowed)
+    {
+        runAllowed = allowed;
+        if (!allowed) IsRunning = false;
+    }
 
     /// <summary>문서를 읽는 동안 등, 카메라는 붙여 둔 채 이동과 시점만 멈출 때 씁니다.</summary>
     public bool InputPaused { get; set; }
@@ -144,6 +163,8 @@ public class FreeRoamMovement : MonoBehaviour
         startFeetPosition = transform.position;
         startYaw = yaw;
         controlling = true;
+        currentSpeed = walkSpeed;
+        IsRunning = false;
 
         ApplyToCamera();
         Debug.Log($"[FreeRoamMovement] 조작 시작 - 위치 {transform.position}, 눈 높이 {eye:0.00}");
@@ -164,6 +185,7 @@ public class FreeRoamMovement : MonoBehaviour
     {
         controlling = false;
         InputPaused = false;
+        IsRunning = false;
         CameraShakeEuler = Vector3.zero;
         targetCamera = null;
         verticalVelocity = Vector3.zero;
@@ -171,7 +193,11 @@ public class FreeRoamMovement : MonoBehaviour
 
     private void Update()
     {
-        if (!controlling || InputPaused) return;
+        if (!controlling || InputPaused)
+        {
+            IsRunning = false;
+            return;
+        }
 
         // ── 시점: 좌우는 몸 전체, 위아래는 머리만 ──
         yaw += Input.GetAxis("Mouse X") * mouseSensitivity;
@@ -187,6 +213,13 @@ public class FreeRoamMovement : MonoBehaviour
         if (move.sqrMagnitude > 1f)
             move.Normalize();
 
+        // ── 달리기: Shift를 누른 채 앞으로 갈 때만 (뒷걸음질/옆걸음으로는 못 달린다) ──
+        bool wantsRun = runAllowed && v > 0.1f &&
+                        (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift));
+        IsRunning = wantsRun;
+        float targetSpeed = wantsRun ? runSpeed : walkSpeed;
+        currentSpeed = Mathf.MoveTowards(currentSpeed, targetSpeed, (runSpeed - walkSpeed) * speedChangeRate * Time.deltaTime);
+
         if (hasGround)
         {
             if (controller.isGrounded && verticalVelocity.y < 0f)
@@ -200,7 +233,7 @@ public class FreeRoamMovement : MonoBehaviour
         }
 
         Vector3 before = transform.position;
-        controller.Move((move * walkSpeed + verticalVelocity) * Time.deltaTime);
+        controller.Move((move * currentSpeed + verticalVelocity) * Time.deltaTime);
         UpdateFootsteps(before);
 
         // 맵 구멍으로 떨어지면 시작 위치로 되돌린다.
@@ -229,8 +262,10 @@ public class FreeRoamMovement : MonoBehaviour
             return;
         }
 
+        // 달릴 때는 보폭이 넓어 발소리 간격도 조금 길게 잡는다.
+        float stride = IsRunning ? stepDistance * 1.3f : stepDistance;
         stepAccum += delta.magnitude;
-        if (stepAccum < stepDistance) return;
+        if (stepAccum < stride) return;
         stepAccum = 0f;
 
         if (footSource == null)
@@ -239,8 +274,8 @@ public class FreeRoamMovement : MonoBehaviour
             footSource.playOnAwake = false;
             footSource.spatialBlend = 0f;
         }
-        footSource.pitch = Random.Range(footstepPitch.x, footstepPitch.y);
-        footSource.PlayOneShot(footstepClip, footstepVolume * Random.Range(0.85f, 1f));
+        footSource.pitch = Random.Range(footstepPitch.x, footstepPitch.y) * (IsRunning ? 1.08f : 1f);
+        footSource.PlayOneShot(footstepClip, footstepVolume * Random.Range(0.85f, 1f) * (IsRunning ? 1.25f : 1f));
     }
 
     // 이동이 모두 끝난 뒤에 카메라를 옮겨야 떨림이 없다.

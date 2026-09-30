@@ -287,7 +287,20 @@ public class WhoAiManager : MonoBehaviour
             director.stopped += OnStopped;
             director.Play();
 
-            yield return new WaitUntil(() => finished);
+            // 타임라인이 총을 옮기는 동안 마지막 자세를 기억해 둔다.
+            // 끝나는 순간 애니메이션이 풀려 총이 테이블로 튀어 돌아가도, 이 자세로 다시 붙잡는다.
+            Vector3 lastGunPos = gun.transform.position;
+            Quaternion lastGunRot = gun.transform.rotation;
+            while (!finished)
+            {
+                yield return null;
+                if (!finished)
+                {
+                    lastGunPos = gun.transform.position;
+                    lastGunRot = gun.transform.rotation;
+                }
+            }
+            gun.HoldPoseAfterWhoTimeline(lastGunPos, lastGunRot);
         }
 
         // WhoShoot 타임라인이 있으면 타임라인 끝에서 바로 발사한다.
@@ -331,14 +344,14 @@ public class WhoAiManager : MonoBehaviour
         else if (whoKilledSelfWithLive)
         {
             Debug.Log($"[WhoAiManager] Who 자해(실탄) -> 틱 소리 후 {shotFirstReturnDelay:0.00}초 뒤 총을 내려놓습니다.");
-            gun.ReturnToTableAfterWhoShot(shotFirstReturnDelay, false);
+            gun.ReturnToTableAfterWhoShot(shotFirstReturnDelay, false, true);
         }
         else
         {
             float blankDelay = Mathf.Max(0f, blankReturnDelayAfterShot);
             Debug.Log($"[WhoAiManager] Who 공탄 발사 -> 틱 소리 후 {blankDelay:0.00}초 뒤 총을 내려놓습니다.");
 
-            gun.ReturnToTableAfterWhoShot(blankDelay);
+            gun.ReturnToTableAfterWhoShot(blankDelay, true, shootSelf);
         }
 
         if (director == null && postShotDelay > 0f)

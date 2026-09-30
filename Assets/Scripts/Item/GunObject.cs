@@ -77,6 +77,13 @@ public class GunObject : InteractableObject
     [Header("Return Animation")]
     public float returnDuration = 0.4f;
 
+    [Tooltip("Who가 자기 자신에게 쏜 뒤 총을 테이블로 되돌리는 시간(초). " +
+             "총구가 Who 쪽을 보고 있어서 많이 돌아야 하므로 일반 복귀보다 길게 잡습니다.")]
+    public float whoSelfReturnDuration = 0.8f;
+
+    [Tooltip("Who의 발사 뒤 총이 테이블로 돌아갈 때 위로 그리는 호의 높이(m). 0이면 곧장 돌아갑니다.")]
+    public float whoReturnArcHeight = 0.25f;
+
     [Header("Death Sequence")]
     [Tooltip("사망 연출이 시작됐을 때 총을 든(조준한) 자세를 유지할 시간(초). " +
              "이 시간이 지나면 총을 내려놓고, 다 내려놓아야 노이즈 연출이 시작됩니다.")]
@@ -796,15 +803,33 @@ public class GunObject : InteractableObject
     /// 플레이어가 맞아서 hitted 타임라인이 시작된 경우에는 false를 넘겨서
     /// 총 복귀가 연출을 기다리지 않고 동시에 진행되게 합니다.
     /// </param>
-    public void ReturnToTableAfterWhoShot(float delay = 0f, bool waitForMuzzleFlash = true)
+    /// <param name="fromSelfShot">Who가 자기 자신에게 쏜 뒤인지. 더 천천히, 호를 그리며 돌아온다.</param>
+    public void ReturnToTableAfterWhoShot(float delay = 0f, bool waitForMuzzleFlash = true, bool fromSelfShot = false)
     {
         if (whoReturnCoroutine != null)
             StopCoroutine(whoReturnCoroutine);
 
-        whoReturnCoroutine = StartCoroutine(WhoReturnRoutine(delay, waitForMuzzleFlash));
+        whoReturnCoroutine = StartCoroutine(WhoReturnRoutine(delay, waitForMuzzleFlash, fromSelfShot));
     }
 
-    private System.Collections.IEnumerator WhoReturnRoutine(float delay, bool waitForMuzzleFlash)
+    /// <summary>
+    /// Who의 발사 타임라인이 끝난 직후, 타임라인이 마지막으로 잡아 둔 자세 그대로 총을 붙잡아 둔다.
+    /// 타임라인(Wrap Mode: None)이 끝나는 순간 애니메이션이 풀리면서 총이 테이블로 "툭" 튀어 돌아가
+    /// 테이블 위에서 쏘고 → 제자리에서 복귀하는 것처럼 보이던 문제를 막는다.
+    /// </summary>
+    public void HoldPoseAfterWhoTimeline(Vector3 worldPos, Quaternion worldRot)
+    {
+        if (originalParent != null && transform.parent != originalParent)
+            transform.SetParent(originalParent, true);
+
+        if (selfAnimator != null && selfAnimator.enabled)
+            selfAnimator.enabled = false;
+
+        suppressBasePositionLerp = true;
+        transform.SetPositionAndRotation(worldPos, worldRot);
+    }
+
+    private System.Collections.IEnumerator WhoReturnRoutine(float delay, bool waitForMuzzleFlash, bool fromSelfShot)
     {
         // 이 코루틴은 발사 직후에 시작되므로, 지금 섬광이 켜져 있다면 실탄이었다는 뜻이다.
         // 대기 시간이 섬광보다 길어서 나중에는 이미 꺼져 있을 수 있으므로 여기서 미리 기억해 둔다.
@@ -850,15 +875,25 @@ public class GunObject : InteractableObject
             ? originalParent.rotation * originalLocalRot
             : originalLocalRot;
 
-        Debug.Log($"[GunObject] Who의 발사 연출이 끝나 총을 원래 위치로 되돌립니다 ({returnDuration:0.00}초)");
+        float duration = fromSelfShot ? Mathf.Max(returnDuration, whoSelfReturnDuration) : returnDuration;
+        Debug.Log($"[GunObject] Who의 발사 연출이 끝나 총을 원래 위치로 되돌립니다 ({duration:0.00}초{(fromSelfShot ? ", 자기에게 쏜 뒤" : "")})");
+
+        // 곧장 당기면 총이 테이블/몸을 뚫고 지나가며 제자리에서 휙 돈다.
+        // 위로 살짝 호를 그리며 내려오고, 회전은 이동보다 조금 늦게 따라가게 해서 부드럽게 만든다.
+        float arc = Mathf.Max(0f, whoReturnArcHeight) * (fromSelfShot ? 1.4f : 1f);
+        Vector3 control = (startPos + destWorldPos) * 0.5f + Vector3.up * arc;
 
         float elapsed = 0f;
-        while (elapsed < returnDuration)
+        while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
-            float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / returnDuration));
-            transform.position = Vector3.Lerp(startPos, destWorldPos, t);
-            transform.rotation = Quaternion.Slerp(startRot, destWorldRot, t);
+            float k = Mathf.Clamp01(elapsed / duration);
+            float t = Mathf.SmoothStep(0f, 1f, k);
+            float u = 1f - t;
+            transform.position = u * u * startPos + 2f * u * t * control + t * t * destWorldPos;
+
+            float r = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(k * 1.15f - 0.1f));
+            transform.rotation = Quaternion.Slerp(startRot, destWorldRot, r);
             yield return null;
         }
 

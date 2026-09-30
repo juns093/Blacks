@@ -680,16 +680,40 @@ public class GameSceneStoryDialogues : MonoBehaviour
         }
 
         // ── 기억 4: 거리 ──
-        //  (Forth 영상이 멈춘 뒤) 목격자를 피해 돈 가방 + 차 키 → 경적으로 차 찾기 → 차 타고 떠남
+        //  (Forth 영상이 멈춘 뒤) 집에 가는 행인들 눈을 피해 돈 가방 + 차 키 → 경적으로 차 찾기 → 차 타고 떠남
+        //  Shift로 달릴 수 있지만, 가까이서 뛰면 행인이 발소리를 듣고 돌아본다.
         //  → 영상 끝, 테이블로 돌아온 뒤 추리 질문 → Item_Use_Forth
         FlashbackFreeRoamSegment street = FindSegment(StreetSegmentName);
         if (street != null)
         {
+            street.SetAllowRun(true);
             street.SetHintTexts(
-                controls: "WASD 이동  /  마우스 시점  /  Tab 기억 노트",
+                controls: "WASD 이동  /  Shift 달리기  /  마우스 시점  /  Tab 기억 노트",
                 clues: "사람들 눈을 피해 구급상자와 차 키를 찾으세요  ({0}/{1})",
                 search: "[E] 차 키 버튼  -  가까울수록 경적이 크게 들린다",
                 found: "찾았다...");
+
+            // 행인에게 들켰을 때: "뭐해요?" → 변명 고르기 → 50% 확률로 넘어간다.
+            // (같은 사람에게 두 번째로 걸리면 변명이 통하지 않는다)
+            street.SetExcuseTexts(
+                spotted: "행인: 거기서 뭐해요?",
+                options: new[]
+                {
+                    "차 키를 떨어뜨려서요. 찾고 있었어요.",
+                    "그냥 산책하던 중입니다.",
+                    "이 근처 사는 사람이에요. 집에 가는 길이고요."
+                },
+                success: new[]
+                {
+                    "행인: ...아, 그래요? 밤길 조심하세요.",
+                    "행인: 그렇군요. 괜히 놀랐네."
+                },
+                fail: new[]
+                {
+                    "행인: 거짓말 같은데요... 경찰 부를게요.",
+                    "행인: 수상한데. 신고해야겠어요!"
+                },
+                repeat: "행인: 또 당신이에요? 안 되겠네요, 신고할게요.");
 
             FreeRoamPickupItem[] m4 = street.ClueItems;
             SetClue(m4, 0, "m4_money", "구급상자 속 돈",
