@@ -4,9 +4,9 @@ using UnityEngine.UI;
 
 // 테이블 건너편에 누가 앉아 있는지 보여 준다. (???, 트레일, 트레일 시체)
 //
-//  - 1~3판 : ???가 맞은편에 서 있다.
-//  - 4판   : 트레일이 맞은편, ???는 옆에 서서 지켜본다.
-//  - 5판   : ???가 다시 맞은편, 옆에는 책상에 엎어진 트레일의 시체.
+//  - 1~2판 : ???가 맞은편에 서 있다.
+//  - 3판   : 트레일이 맞은편, ???는 옆에 서서 지켜본다.
+//  - 4판   : ???가 다시 맞은편, 옆에는 책상에 엎어진 트레일의 시체.
 // 누가 죽으면 SlumpableBody로 책상에 머리를 박으며 쓰러진다.
 public class OpponentPresenter : MonoBehaviour
 {
@@ -35,11 +35,14 @@ public class OpponentPresenter : MonoBehaviour
 
     private void Awake() => Instance = this;
 
-    /// <summary>플레이어가 몇 번 죽었는지에 맞춰 자리를 잡는다. (씬 시작/재시작 시)</summary>
-    public void ApplyForDeaths(int deaths)
+    /// <summary>
+    /// 플레이어가 몇 번 죽었는지에 맞춰 자리를 잡는다. (씬 시작/재시작 시)
+    /// trailRoundDeaths = 트레일과의 판이 시작될 때의 사망 횟수
+    /// </summary>
+    public void ApplyForDeaths(int deaths, int trailRoundDeaths)
     {
-        if (deaths == 3) SetStage(Opponent.Trail, trailAlive: true);
-        else if (deaths >= 4) SetStage(Opponent.Who, trailAlive: false);
+        if (deaths == trailRoundDeaths) SetStage(Opponent.Trail, trailAlive: true);
+        else if (deaths > trailRoundDeaths) SetStage(Opponent.Who, trailAlive: false);
         else SetStage(Opponent.Who, trailAlive: null);
     }
 

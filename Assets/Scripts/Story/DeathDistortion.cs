@@ -121,6 +121,9 @@ public class DeathDistortion : MonoBehaviour
 
     public void SetHallucination(bool on) => hallucinationTarget = on ? 1f : 0f;
 
+    /// <summary>기다리지 않고 순간 왜곡만 준다. (아이템을 눌러 기억으로 들어갈 때 등)</summary>
+    public void Pulse(float amount) => spike = Mathf.Max(spike, Mathf.Clamp01(amount));
+
     /// <summary>화면이 깨지듯 번쩍이며 끝난다.</summary>
     public IEnumerator Shatter()
     {

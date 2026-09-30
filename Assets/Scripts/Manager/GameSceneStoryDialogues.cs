@@ -72,7 +72,7 @@ public class GameSceneStoryDialogues : MonoBehaviour
             "좋아."
         });
 
-        // ── 1~3판에서 ???를 쐈을 때: 처음부터 다시 ──
+        // ── 1~2판에서 ???를 쐈을 때: 처음부터 다시 ──
         typeWriter.SetDialogueGroup(StoryDialogueIndex.WhoKilledFirst, "Who_Killed_First", new[]
         {
             "...",
@@ -187,7 +187,7 @@ public class GameSceneStoryDialogues : MonoBehaviour
             "???: 많아."
         });
 
-        // ── THIRD ROUND ──
+        // ── 2판 죽음 도중: 드레일 이야기 (예전 THIRD ROUND) ──
         typeWriter.SetDialogueGroup(StoryDialogueIndex.RoundStartThird, "Round_3", new[]
         {
             "드레일.",
@@ -201,7 +201,7 @@ public class GameSceneStoryDialogues : MonoBehaviour
             "..."
         });
 
-        // ── 3판에서 죽음: 환각 (연구실, 드레일) ──
+        // ── 2판 죽음 도중 (드레일 이야기 뒤): 환각 (연구실, 드레일) ──
         typeWriter.SetDialogueGroup(StoryDialogueIndex.PlayerDeathThird, "Death_3_Lab", new[]
         {
             "(연구실.)",

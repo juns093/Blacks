@@ -214,23 +214,28 @@ public class TypeWriter : MonoBehaviour
     /// </summary>
     public void PlayDialogueGroup(int groupIndex)
     {
+        // 재생할 게 없을 때도 반드시 "끝났다"를 알린다.
+        // 그냥 return하면 대사가 끝나기를 기다리던 쪽(사망 연출, 아이템 연출 등)이 영원히 멈춘다.
         if (dialogueGroups == null || groupIndex < 0 || groupIndex >= dialogueGroups.Length)
         {
             Debug.LogWarning($"[TypeWriter] dialogueGroups[{groupIndex}]가 존재하지 않습니다. " +
-                              $"등록된 그룹 개수: {(dialogueGroups == null ? 0 : dialogueGroups.Length)}");
+                              $"등록된 그룹 개수: {(dialogueGroups == null ? 0 : dialogueGroups.Length)}. 바로 완료 처리합니다.");
+            OnAllDialoguesFinished();
             return;
         }
 
         var group = dialogueGroups[groupIndex];
         if (group == null)
         {
-            Debug.LogWarning($"[TypeWriter] dialogueGroups[{groupIndex}]가 null입니다. 그룹을 생성하거나 인덱스를 확인하세요.");
+            Debug.LogWarning($"[TypeWriter] dialogueGroups[{groupIndex}]가 null입니다. 바로 완료 처리합니다.");
+            OnAllDialoguesFinished();
             return;
         }
 
         if (group.lines == null || group.lines.Length == 0)
         {
-            Debug.LogWarning($"[TypeWriter] dialogueGroups[{groupIndex}]의 lines가 비어 있습니다.");
+            Debug.LogWarning($"[TypeWriter] dialogueGroups[{groupIndex}]의 lines가 비어 있습니다. 바로 완료 처리합니다.");
+            OnAllDialoguesFinished();
             return;
         }
 

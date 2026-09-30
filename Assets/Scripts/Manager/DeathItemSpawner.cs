@@ -293,23 +293,35 @@ public class DeathItemSpawner : MonoBehaviour
     }
 
     /// <summary>
-    /// 새 스토리 흐름용: fragmentIndex번 파편을 화면 위쪽에 띄우고, 누르면
-    ///  - memoryIndex가 0~3이면: 아이템 대사(beforeDialogueGroup) → 그 기억(타임라인/탐색/추리 질문)
-    ///  - memoryIndex가 음수면: 아이템 대사만
+    /// 새 스토리 흐름용: fragmentIndex번 파편을 화면 위쪽에 띄우고
+    ///  1) 아이템이 떠 있는 동안 아이템 대사(itemDialogueGroup)를 먼저 들려준다. (발견 → ???와의 대화)
+    ///  2) 아이템을 누르면 그 즉시 기억 장소로 이동한다. (memoryIndex 0~3: 타임라인/탐색/추리 질문)
+    ///     memoryIndex가 음수면 누르는 것으로 끝난다. (17번 기록처럼 기억이 없는 아이템)
     /// 까지 끝난 뒤 돌아온다.
+    ///
+    /// 예전에는 누른 뒤에 테이블에서 긴 아이템 대사가 먼저 흘러서,
+    /// 아이템을 써도 회상으로 넘어가지 않는 것처럼 보였다.
     /// </summary>
-    public IEnumerator PlayFragment(int fragmentIndex, int memoryIndex, int beforeDialogueGroup)
+    public IEnumerator PlayFragment(int fragmentIndex, int memoryIndex, int itemDialogueGroup)
     {
         EnsureFragmentScreen();
         if (!fragmentScreen.IsShowing)
             yield return fragmentScreen.Show(fragmentIndex, fragmentIndex);
 
+        // 1) 아이템 대사 (아직 누를 수 없다)
+        if (itemDialogueGroup >= 0)
+            yield return PlayDialogueAndWait(itemDialogueGroup);
+
+        // 2) 누르기를 기다린다
         Coroutine hide = StartCoroutine(fragmentScreen.WaitForClickAndHide());
         while (fragmentScreen.IsShowing && !fragmentScreen.WasClicked)
             yield return null;
 
         if (memoryIndex >= 0)
         {
+            // 누르는 순간 화면이 일렁이며 기억으로 빨려 들어간다.
+            DeathDistortion.Get().Pulse(0.8f);
+
             var runnerObject = new GameObject($"MemoryFragment_{memoryIndex + 1}");
             var runner = runnerObject.AddComponent<ItemFovInteract>();
             runner.Configure(0f, 0f, true, false, GetUseTimeline(memoryIndex), delayAfterItemTimeline);
@@ -319,12 +331,14 @@ public class DeathItemSpawner : MonoBehaviour
                 secondTimelineDialogueGroupIndex,
                 thirdTimelineDialogueGroupIndex,
                 forthTimelineDialogueGroupIndex);
-            runner.SetBeforeUseDialogueGroup(beforeDialogueGroup);
+            runner.SetBeforeUseDialogueGroup(-1);
             runner.SetAfterTimelineDialogueGroup(-1);
             runner.SetFreeRoamSegment(GetFreeRoamSegment(memoryIndex));
             runner.SetFilmGrainVolume(GetMemoryVolume(memoryIndex));
 
-            Debug.Log($"[DeathItemSpawner] 파편 {fragmentIndex + 1} → 기억 {memoryIndex + 1}을(를) 재생합니다.");
+            Debug.Log($"[DeathItemSpawner] 파편 {fragmentIndex + 1} → 기억 {memoryIndex + 1}(으)로 이동합니다. " +
+                      $"(타임라인: {(GetUseTimeline(memoryIndex) != null ? GetUseTimeline(memoryIndex).name : "없음")}, " +
+                      $"탐색 구간: {(GetFreeRoamSegment(memoryIndex) != null ? GetFreeRoamSegment(memoryIndex).name : "없음")})");
             yield return runner.PlayAsMemoryFragment();
 
             while (fragmentScreen.IsShowing)
@@ -336,17 +350,23 @@ public class DeathItemSpawner : MonoBehaviour
         {
             while (fragmentScreen.IsShowing)
                 yield return null;
-
-            TimelineManager tm = FindFirstObjectByType<TimelineManager>(FindObjectsInactive.Include);
-            if (beforeDialogueGroup >= 0 && tm != null)
-            {
-                bool done = false;
-                tm.PlayImmediateDialogue(beforeDialogueGroup, () => done = true);
-                yield return new WaitUntil(() => done);
-            }
         }
 
         Debug.Log($"[DeathItemSpawner] 파편 {fragmentIndex + 1} 종료.");
+    }
+
+    private IEnumerator PlayDialogueAndWait(int groupIndex)
+    {
+        TimelineManager tm = FindFirstObjectByType<TimelineManager>(FindObjectsInactive.Include);
+        if (tm == null) yield break;
+
+        // 앞 대사가 아직 돌고 있으면 끝나기를 기다린다. (겹치면 앞 대사가 잘린다)
+        while (tm.IsImmediateDialoguePlaying)
+            yield return null;
+
+        bool done = false;
+        tm.PlayImmediateDialogue(groupIndex, () => done = true);
+        yield return new WaitUntil(() => done);
     }
 
     private void EnsureFragmentScreen()

@@ -50,10 +50,13 @@ public class GameStateManager : MonoBehaviour
     [Tooltip("죽을 때마다 기억 파편을 띄워줄 스포너. 비워두면 씬에서 자동으로 찾습니다.")]
     [SerializeField] private DeathItemSpawner deathItemSpawner;
 
-    // 5판(마지막 ???와의 판)이 시작될 때의 사망 횟수. (1~3판 ???, 4판 트레일, 5판 ???)
-    private const int FinalRoundDeaths = 4;
+    // 판 구성: 1~2판 ???, 3판 트레일, 4판(마지막) ???
+    // 트레일과의 판이 시작될 때의 사망 횟수
+    private const int TrailRoundDeaths = 2;
+    // 마지막 ???와의 판이 시작될 때의 사망 횟수
+    private const int FinalRoundDeaths = 3;
 
-    [Tooltip("5판에서 ???를 죽였을 때, 추리 질문을 한 번에 맞힌 수가 이 이상이면 자수 엔딩, 아니면 괴물 엔딩")]
+    [Tooltip("마지막 판에서 ???를 죽였을 때, 추리 질문을 한 번에 맞힌 수가 이 이상이면 자수 엔딩, 아니면 괴물 엔딩")]
     [SerializeField] private int confessionRequiredCorrect = 4;
 
     [Header("HP 설정")]
@@ -325,13 +328,13 @@ public class GameStateManager : MonoBehaviour
     }
 
     // ── 플레이어 사망 ──
-    //  총성 → 화면이 확 일그러짐 → 환각 → 위쪽에 아이템 → (누르면) 아이템 대사 → 기억 → 다음 판 대사 → 새 판
+    //  총성 → 화면이 확 일그러짐 → 환각 → 위쪽에 아이템 → 아이템 대사 → (누르면) 그 기억으로 → 다음 판 대사 → 새 판
     //
-    //  1판(???)  : 법정 환각 → "괜찮아?" → 휴대폰(지하철)                     → 2판 대사
-    //  2판(???)  : 병원 환각 → 혈액(병원) → 약(병원2)                          → 3판 대사
-    //  3판(???)  : 연구실 환각 → 구급상자(거리) → 트레일 등장                  → 4판(트레일)
-    //  4판(트레일): 봉투 환각 → "내가 그랬구나" → 17번 기록 → 트레일의 시체      → 5판(???)
-    //  5판(???)  : "끝났어." → 사망 엔딩
+    //  1판(???)   : 법정 환각 → "괜찮아?" → 휴대폰(지하철)                                  → 2판 대사
+    //  2판(???)   : 병원 환각 → 혈액(병원) → 약(병원2) → 드레일 대화 → 연구실 환각
+    //               → 구급상자(거리) → 트레일 등장                                        → 3판(트레일)
+    //  3판(트레일): 봉투 환각 → "내가 그랬구나" → 17번 기록 → 트레일의 시체                  → 4판(???)
+    //  4판(???)   : "끝났어." → 사망 엔딩
     private IEnumerator PlayerDeathRoutine()
     {
         DeathDistortion fx = DeathDistortion.Get();
@@ -342,7 +345,7 @@ public class GameStateManager : MonoBehaviour
         yield return new WaitForSeconds(0.15f);
         yield return fx.Hit();
 
-        // 5판에서 죽음 → 사망 엔딩
+        // 마지막 판에서 죽음 → 사망 엔딩
         if (deaths >= FinalRoundDeaths + 1)
         {
             yield return fx.FadeBlack(1f, 1.2f);
@@ -359,9 +362,9 @@ public class GameStateManager : MonoBehaviour
         yield return fx.Shatter();
 
         if (deaths == 1) yield return PlayDialogue(StoryDialogueIndex.BackToPresent);
-        if (deaths == 4) yield return PlayDialogue(StoryDialogueIndex.AfterFourthDeath);
+        if (deaths == FinalRoundDeaths) yield return PlayDialogue(StoryDialogueIndex.AfterFourthDeath);
 
-        // 3) 화면 위쪽에 아이템이 뜬다 → 누르면 아이템 대사 → 그 기억
+        // 3) 화면 위쪽에 아이템이 뜬다 → 아이템 대사 → 누르면 그 기억으로
         OpponentPresenter presenter = OpponentPresenter.Instance;
         if (spawner != null)
         {
@@ -370,14 +373,19 @@ public class GameStateManager : MonoBehaviour
                 case 1:
                     yield return spawner.PlayFragment(0, 0, StoryDialogueIndex.ItemUseFirst);
                     break;
-                case 2:
+                case TrailRoundDeaths:
                     yield return spawner.PlayFragment(1, 1, StoryDialogueIndex.ItemUseSecond);
                     yield return spawner.PlayFragment(2, 2, StoryDialogueIndex.ItemUseThird);
-                    break;
-                case 3:
+
+                    // 예전 3판 사이 대화 (드레일) → 연구실 환각이 머리를 스친다
+                    yield return PlayDialogue(StoryDialogueIndex.RoundStartThird);
+                    fx.SetHallucination(true);
+                    yield return PlayDialogue(StoryDialogueIndex.PlayerDeathThird);
+                    yield return fx.Shatter();
+
                     yield return spawner.PlayFragment(3, 3, StoryDialogueIndex.ItemUseForth);
                     break;
-                case 4:
+                case FinalRoundDeaths:
                     yield return spawner.PlayFragment(4, -1, StoryDialogueIndex.NewItem);
                     break;
             }
@@ -389,10 +397,7 @@ public class GameStateManager : MonoBehaviour
             case 1:
                 yield return PlayDialogue(StoryDialogueIndex.RoundStartSecond);
                 break;
-            case 2:
-                yield return PlayDialogue(StoryDialogueIndex.RoundStartThird);
-                break;
-            case 3:
+            case TrailRoundDeaths:
                 // 암전 → 문이 열리고 트레일이 맞은편에 앉는다. ???는 옆에 서서 지켜본다.
                 yield return fx.FadeBlack(1f, 0.8f);
                 PlayOneShot2D(ProceduralSfx.DoorCreak(), 0.9f);
@@ -402,7 +407,7 @@ public class GameStateManager : MonoBehaviour
                 yield return PlayDialogue(StoryDialogueIndex.TrailEnter);
                 yield return PlayDialogue(StoryDialogueIndex.RoundStartFourth);
                 break;
-            case 4:
+            case FinalRoundDeaths:
                 // 암전 → 총성 한 발 → 밝아지면 트레일은 시체, ???가 다시 맞은편에
                 yield return fx.FadeBlack(1f, 0.8f);
                 yield return new WaitForSeconds(0.6f);
@@ -435,9 +440,9 @@ public class GameStateManager : MonoBehaviour
 
     // ── 상대 사망 ──
     //  맞은편 사람이 책상에 머리를 박으며 쓰러진다.
-    //  1~3판(???)  : 노이즈가 화면을 덮고 처음부터 다시 (감 익히는 판)
-    //  4판(트레일) : 엔딩 2
-    //  5판(???)    : 추리 질문을 한 번에 맞힌 수에 따라 자수 엔딩 / 괴물 엔딩
+    //  1~2판(???)  : 노이즈가 화면을 덮고 처음부터 다시 (감 익히는 판)
+    //  3판(트레일) : 엔딩 2
+    //  4판(???)    : 추리 질문을 한 번에 맞힌 수에 따라 자수 엔딩 / 괴물 엔딩
     private IEnumerator WhoDeathRoutine()
     {
         CamMove.blockLook = true;
@@ -466,7 +471,7 @@ public class GameStateManager : MonoBehaviour
         int deaths = PlayerDeathCount;
         DeathDistortion fx = DeathDistortion.Get();
 
-        // 4판: 트레일을 죽임 → 엔딩 2
+        // 3판: 트레일을 죽임 → 엔딩 2
         if (presenter != null && presenter.Current == OpponentPresenter.Opponent.Trail)
         {
             yield return PlayDialogue(StoryDialogueIndex.TrailKilledEnding);
@@ -475,7 +480,7 @@ public class GameStateManager : MonoBehaviour
             yield break;
         }
 
-        // 5판: ???를 죽임 → 문서 확인 → 자수 / 괴물
+        // 마지막 판: ???를 죽임 → 문서 확인 → 자수 / 괴물
         if (deaths >= FinalRoundDeaths)
         {
             yield return PlayDialogue(StoryDialogueIndex.WhoKilledFinal);
@@ -503,7 +508,7 @@ public class GameStateManager : MonoBehaviour
             yield break;
         }
 
-        // 1~3판: 노이즈가 화면을 덮고 처음부터 다시
+        // 1~2판: 노이즈가 화면을 덮고 처음부터 다시
         if (glitchEffect != null)
             glitchEffect.StartSound(whoDeathSoundRampDuration * 0.5f);
         if (cameraGlitchEffect != null)
@@ -687,15 +692,15 @@ public class GameStateManager : MonoBehaviour
             loopIntroDialogueGroupIndexes[i] = StoryDialogueIndex.Normalize(loopIntroDialogueGroupIndexes[i]);
     }
 
+    // 몇 번째 죽음에 어떤 환각이 나오는지. (연구실 환각은 2판 죽음 도중에 따로 나온다)
     private void ApplyDefaultPlayerDeathDialogueGroupsIfNeeded()
     {
         playerDeathDialogueGroupIndexes = new List<int>
         {
-            StoryDialogueIndex.PlayerDeathFirst,
-            StoryDialogueIndex.PlayerDeathSecond,
-            StoryDialogueIndex.PlayerDeathThird,
-            StoryDialogueIndex.PlayerDeathFourth,
-            StoryDialogueIndex.PlayerDeathFifth
+            StoryDialogueIndex.PlayerDeathFirst,   // 1판: 법정
+            StoryDialogueIndex.PlayerDeathSecond,  // 2판: 병원
+            StoryDialogueIndex.PlayerDeathFourth,  // 3판(트레일): 봉투
+            StoryDialogueIndex.PlayerDeathFifth    // 4판: 사망 엔딩
         };
     }
 
@@ -756,11 +761,11 @@ public class GameStateManager : MonoBehaviour
 
     private void Start()
     {
-        // 몇 번 죽었는지에 맞춰 맞은편 사람을 앉힌다. (1~3판 ???, 4판 트레일, 5판 ??? + 트레일 시체)
+        // 몇 번 죽었는지에 맞춰 맞은편 사람을 앉힌다. (1~2판 ???, 3판 트레일, 4판 ??? + 트레일 시체)
         OpponentPresenter presenter = OpponentPresenter.Instance != null
             ? OpponentPresenter.Instance
             : FindFirstObjectByType<OpponentPresenter>(FindObjectsInactive.Include);
-        if (presenter != null) presenter.ApplyForDeaths(PlayerDeathCount);
+        if (presenter != null) presenter.ApplyForDeaths(PlayerDeathCount, TrailRoundDeaths);
 
         Debug.Log($"[GameStateManager] 현재 씬 빌드 인덱스: {SceneManager.GetActiveScene().buildIndex} / " +
                   $"플레이어 HP={PlayerMaxHits}, Who HP={whoMaxHits}, 필요 사망 횟수={requiredPlayerDeaths}");

@@ -51,9 +51,15 @@ public class MemoryFragmentScreen : MonoBehaviour
     [SerializeField] private Color lightColor = new Color(1f, 0.85f, 0.8f);
     [SerializeField] private float lightIntensity = 20f;
 
+    [Tooltip("띠 높이 대비 아이템이 차지하는 최대 비율. 마우스를 올리거나 눌러서 커져도 이 안에 들어오게 카메라 거리를 잡습니다.")]
+    [Range(0.3f, 1f)] [SerializeField] private float maxFillOfStrip = 0.8f;
+
     [Header("마우스 반응")]
     [Tooltip("마우스를 올렸을 때 커지는 배율")]
-    [SerializeField] private float hoverScale = 1.3f;
+    [SerializeField] private float hoverScale = 1.15f;
+
+    [Tooltip("눌렀을 때 한 번 커지는 배율 (마우스를 올린 크기 기준)")]
+    [SerializeField] private float clickPunchScale = 1.12f;
 
     [Tooltip("커지고 작아지는 속도")]
     [SerializeField] private float scaleSpeed = 12f;
@@ -127,6 +133,10 @@ public class MemoryFragmentScreen : MonoBehaviour
     public IEnumerator Show(int obtainedBefore, int newFragmentIndex)
     {
         BuildUI();
+
+        // 칸 수가 모자라면 새 파편이 뜰 자리가 없어 클릭을 영영 못 한다. (17번 기록 = 5번째 파편)
+        slotCount = Mathf.Max(slotCount, newFragmentIndex + 1,
+                              fragmentPrefabs != null ? fragmentPrefabs.Count : 0);
 
         newIndex = newFragmentIndex;
         visibleCount = Mathf.Clamp(newFragmentIndex + 1, 0, slotCount);
@@ -222,7 +232,7 @@ public class MemoryFragmentScreen : MonoBehaviour
         while (t < punch)
         {
             t += Time.deltaTime;
-            SetSlotScale(newIndex, Mathf.Lerp(from, hoverScale * 1.35f, t / punch));
+            SetSlotScale(newIndex, Mathf.Lerp(from, hoverScale * clickPunchScale, t / punch));
             yield return null;
         }
 
@@ -364,10 +374,17 @@ public class MemoryFragmentScreen : MonoBehaviour
         urp.renderPostProcessing = false;
         urp.renderType = CameraRenderType.Base;
 
+        // 가로(줄 전체)와 세로(가장 커졌을 때의 아이템) 둘 다 들어오는 거리 중 먼 쪽을 쓴다.
+        // 예전에는 가로만 맞춰서, 기울어진 채 돌거나 커질 때 위아래가 띠 밖으로 잘렸다.
         float rowWidth = (slotCount - 1) * itemSpacing + itemSize + screenMargin * 2f;
         float aspect = (float)stageTexture.width / stageTexture.height;
         float halfFovTan = Mathf.Tan(cameraFov * 0.5f * Mathf.Deg2Rad);
-        float distance = Mathf.Max((rowWidth * 0.5f) / (halfFovTan * aspect), itemSize * 3f);
+        float maxScale = Mathf.Max(1f, hoverScale) * Mathf.Max(1f, clickPunchScale);
+        float itemRadius = itemSize * 0.5f * 1.2f; // 기울기와 회전을 감안한 반지름
+        float neededHalfHeight = (itemRadius * maxScale) / Mathf.Max(0.1f, maxFillOfStrip);
+        float distance = Mathf.Max((rowWidth * 0.5f) / (halfFovTan * aspect),
+                                   neededHalfHeight / halfFovTan,
+                                   itemSize * 3f);
         camGo.transform.localPosition = new Vector3(0f, 0f, -distance);
         camGo.transform.localRotation = Quaternion.identity;
 
@@ -410,18 +427,24 @@ public class MemoryFragmentScreen : MonoBehaviour
     private void SpawnDisplayItem(int index, Transform spinner)
     {
         GameObject prefab = (fragmentPrefabs != null && index < fragmentPrefabs.Count) ? fragmentPrefabs[index] : null;
-        if (prefab == null)
-        {
-            Debug.LogWarning($"[MemoryFragmentScreen] {index + 1}번 파편에 쓸 아이템 프리팹이 없습니다.");
-            return;
-        }
 
         // 꺼진 부모 아래에서 복제하면 스크립트의 Awake/OnEnable이 돌지 않는다.
         var holder = new GameObject($"Item_{index + 1}");
         holder.SetActive(false);
         holder.transform.SetParent(spinner, false);
 
-        GameObject item = Instantiate(prefab, holder.transform);
+        // 프리팹이 없으면 (예: 17번의 사진과 기록) 서류 한 장을 만들어 보여준다.
+        // 비워 두면 클릭할 게 없어서 진행이 멈춘다.
+        GameObject item;
+        if (prefab != null)
+        {
+            item = Instantiate(prefab, holder.transform);
+        }
+        else
+        {
+            Debug.Log($"[MemoryFragmentScreen] {index + 1}번 파편에 프리팹이 없어 기본 서류 모양을 씁니다.");
+            item = CreateFallbackDocument(holder.transform);
+        }
         item.transform.localPosition = Vector3.zero;
         item.SetActive(true);
 
@@ -449,6 +472,43 @@ public class MemoryFragmentScreen : MonoBehaviour
         item.transform.position += spinner.position - b.center;
 
         pivot.localScale = savedScale;
+    }
+
+    // 사진이 클립으로 꽂힌 서류 한 장. (17번의 사진과 기록 등 프리팹이 없는 파편용)
+    private static GameObject CreateFallbackDocument(Transform parent)
+    {
+        var root = new GameObject("Document");
+        root.transform.SetParent(parent, false);
+
+        void Part(string partName, Vector3 pos, Vector3 size, Color color)
+        {
+            var p = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            p.name = partName;
+            p.transform.SetParent(root.transform, false);
+            p.transform.localPosition = pos;
+            p.transform.localScale = size;
+            var r = p.GetComponent<Renderer>();
+            if (r != null)
+            {
+                Material m = r.material;
+                if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", color);
+                if (m.HasProperty("_Color")) m.SetColor("_Color", color);
+            }
+        }
+
+        // 종이 (세로로 세워 카메라를 보게)
+        Part("Paper", Vector3.zero, new Vector3(0.21f, 0.297f, 0.004f), new Color(0.86f, 0.83f, 0.74f));
+        // 사진
+        Part("Photo", new Vector3(-0.045f, 0.075f, -0.004f), new Vector3(0.08f, 0.1f, 0.003f), new Color(0.22f, 0.2f, 0.2f));
+        // 글줄
+        for (int i = 0; i < 5; i++)
+            Part("Line" + i, new Vector3(0.01f, -0.02f - i * 0.022f, -0.003f), new Vector3(0.16f, 0.006f, 0.002f), new Color(0.3f, 0.28f, 0.26f));
+        // 붉은 도장
+        Part("Stamp", new Vector3(0.06f, 0.08f, -0.003f), new Vector3(0.05f, 0.05f, 0.002f), new Color(0.6f, 0.08f, 0.06f));
+
+        // 기울어진 무대(displayTilt)에서 앞을 보도록 눕힌다.
+        root.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
+        return root;
     }
 
     private static Bounds GetBounds(GameObject go)

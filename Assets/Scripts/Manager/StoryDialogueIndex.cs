@@ -4,10 +4,10 @@ public static class StoryDialogueIndex
 {
     // ── 시작 ──
     public const int IntroMain = 4;          // PROLOGUE + FIRST ROUND
-    public const int WhoKilledFirst = 5;     // 1~3판에서 ???를 쐈을 때 (처음부터 다시)
+    public const int WhoKilledFirst = 5;     // 1~2판에서 ???를 쐈을 때 (처음부터 다시)
     public const int WhoKilledSecond = 6;
 
-    // ── 아이템을 눌렀을 때 (기억으로 들어가기 전) ──
+    // ── 아이템이 떴을 때 (누르기 전, 누르면 그 기억으로) ──
     public const int ItemUseFirst = 7;       // 휴대폰
     public const int ItemUseSecond = 8;      // 혈액
     public const int ItemUseThird = 9;       // 약
@@ -16,25 +16,25 @@ public static class StoryDialogueIndex
     // ── 죽었을 때의 환각 ──
     public const int PlayerDeathFirst = 11;  // 1판: 법정 (낯선 목소리)
     public const int PlayerDeathSecond = 12; // 2판: 병원 (17번)
-    public const int PlayerDeathThird = 13;  // 3판: 연구실 (드레일)
-    public const int PlayerDeathFourth = 14; // 4판: 법정 (트레일의 봉투)
-    public const int PlayerDeathFifth = 15;  // 5판: ???에게 사망 → 사망 엔딩
+    public const int PlayerDeathThird = 13;  // 2판 죽음 도중: 연구실 (드레일)
+    public const int PlayerDeathFourth = 14; // 3판(트레일): 법정 (트레일의 봉투)
+    public const int PlayerDeathFifth = 15;  // 4판: ???에게 사망 → 사망 엔딩
 
     public const int FinalRules = 16;        // (지금은 쓰지 않음)
 
     // ── 판 사이 ──
     public const int BackToPresent = 17;     // 1판 환각 뒤 "하... 괜찮아?"
     public const int RoundStartSecond = 18;
-    public const int RoundStartThird = 19;
+    public const int RoundStartThird = 19;   // 2판 죽음 도중: 드레일 이야기
     public const int TrailEnter = 20;        // 트레일 등장
-    public const int RoundStartFourth = 21;  // 트레일과의 판
+    public const int RoundStartFourth = 21;  // 트레일과의 판 (3판)
     public const int AfterFourthDeath = 22;  // "내가 그랬구나"
     public const int NewItem = 23;           // 17번의 사진과 기록
-    public const int RoundStartFifth = 24;   // 옆에 트레일의 시체
+    public const int RoundStartFifth = 24;   // 옆에 트레일의 시체 (4판)
 
     // ── 엔딩 ──
     public const int TrailKilledEnding = 25; // 엔딩 2
-    public const int WhoKilledFinal = 26;    // 5판에서 ???를 죽임 → 문서 확인
+    public const int WhoKilledFinal = 26;    // 4판에서 ???를 죽임 → 문서 확인
     public const int ConfessionA = 27;
     public const int ConfessionB = 28;       // 경찰서
     public const int MonsterA = 29;

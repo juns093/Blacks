@@ -212,11 +212,24 @@ public class TimelineManager : MonoBehaviour
 
     // 총알을 모두 쏘고 카메라가 고정된 후, 단 하나의 대사(groupIndex)만 재생.
     // 대사가 끝나면 재장전 + Bullet 타임라인이 이어짐.
-    public void TriggerReloadDialogue(int groupIndex = 1)
+    // groupIndex가 음수이거나 0~3(회상 영상 도중 대사 칸)이면 대사 없이 바로 재장전한다.
+    // (예전 기본값 1은 Item2 칸이라, 탄을 다 쓸 때마다 "짐승의 발...?" 대사가 튀어나왔다)
+    public void TriggerReloadDialogue(int groupIndex = -1)
     {
-        if (typeWriter == null)
+        if (typeWriter == null || groupIndex <= 3)
         {
-            Debug.LogWarning("[TimelineManager] typeWriter가 연결되어 있지 않아 대사를 재생할 수 없습니다!");
+            if (typeWriter == null)
+                Debug.LogWarning("[TimelineManager] typeWriter가 연결되어 있지 않아 대사 없이 재장전합니다.");
+            else
+                Debug.Log($"[TimelineManager] TriggerReloadDialogue(groupIndex={groupIndex}): 재장전 대사 없이 바로 새 라운드를 시작합니다.");
+
+            if (waitingForReloadTrigger)
+            {
+                waitingForReloadTrigger = false;
+                if (ammoManager != null)
+                    ammoManager.LoadShells();
+            }
+            StartRoundFlow();
             return;
         }
 
