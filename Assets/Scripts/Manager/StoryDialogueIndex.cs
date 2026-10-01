@@ -4,8 +4,9 @@ public static class StoryDialogueIndex
 {
     // ── 시작 ──
     public const int IntroMain = 4;          // PROLOGUE + FIRST ROUND
-    public const int WhoKilledFirst = 5;     // 1~3판에서 ???를 쐈을 때 (처음부터 다시)
-    public const int WhoKilledSecond = 6;
+    public const int EndingOne = 5;          // 1~3판에서 ???를 죽임 → 엔딩 1
+    public const int WhoKilledFirst = EndingOne; // (예전 이름)
+    public const int EndingOneDying = 6;     // 아이템을 하나라도 쓴 뒤(2~3판) ???를 죽임 → 딸을 그리는 마지막 말    // (쓰지 않음)
 
     // ── 아이템을 눌렀을 때 (기억으로 들어가기 전) ──
     public const int ItemUseFirst = 7;       // 휴대폰

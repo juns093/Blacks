@@ -185,6 +185,13 @@ public class ItemFovInteract : InteractableObject
         beforeUseDialogueGroupIndex = groupIndex;
     }
 
+    // 아이템 대사가 끝나고 회상(타임라인/탐색)에 들어가기 직전에 불린다. (환각 끄기 등)
+    private System.Action onBeforeUseDialogueDone;
+    public void SetOnBeforeUseDialogueDone(System.Action callback)
+    {
+        onBeforeUseDialogueDone = callback;
+    }
+
     public void SetTimelineMarkerDialogueGroups(int first, int second, int third, int forth)
     {
         firstMarkerDialogueGroupIndex = first;
@@ -286,6 +293,7 @@ public class ItemFovInteract : InteractableObject
         // 연출(타임라인) 시작 전에 먼저 나오는 대사. 끝날 때까지 기다린 뒤 다음으로 진행한다.
         if (beforeUseDialogueGroupIndex >= 0)
             yield return StartCoroutine(PlayUseDialogueRoutine(beforeUseDialogueGroupIndex));
+        onBeforeUseDialogueDone?.Invoke();
 
         PlayableDirector activeTimeline = GetActiveUseTimeline();
 
@@ -340,9 +348,24 @@ public class ItemFovInteract : InteractableObject
 
             // 전화를 받는 기억: 통화 장면에서 영상을 멈추고 두 번째 탐색(화장실 등)을 한 뒤 테이블 복귀 구간부터 이어 튼다.
             bool afterCallDone = !(roamFirst && freeRoamSegment.HasAfterCall);
+
+            // 타임라인을 고쳐서 길이가 줄면 멈출 시점이 끝을 넘어가 탐색이 통째로 빠진다.
+            // 그럴 땐 끝나기 직전에 멈춘다.
+            float endGuard = Mathf.Max(0f, (float)activeTimeline.duration - 0.15f);
+            float callPauseAt = 0f, segmentPauseAt = 0f;
+            if (freeRoamSegment != null)
+            {
+                callPauseAt = Mathf.Min(freeRoamSegment.AfterCallPauseAt, endGuard);
+                segmentPauseAt = Mathf.Min(freeRoamSegment.PauseTimelineAt, endGuard);
+                if (!afterCallDone && freeRoamSegment.AfterCallPauseAt > endGuard)
+                    Debug.LogWarning($"[ItemFovInteract] 통화 뒤 탐색 시점({freeRoamSegment.AfterCallPauseAt:0.00}초)이 타임라인 길이({activeTimeline.duration:0.00}초)를 넘습니다. {callPauseAt:0.00}초에서 멈춥니다.");
+                if (!segmentDone && freeRoamSegment.PauseTimelineAt > endGuard)
+                    Debug.LogWarning($"[ItemFovInteract] 탐색 시작 시점({freeRoamSegment.PauseTimelineAt:0.00}초)이 타임라인 길이({activeTimeline.duration:0.00}초)를 넘습니다. {segmentPauseAt:0.00}초에서 멈춥니다.");
+            }
+
             while (!finished)
             {
-                if (!afterCallDone && activeTimeline.time >= freeRoamSegment.AfterCallPauseAt)
+                if (!afterCallDone && activeTimeline.time >= callPauseAt)
                 {
                     afterCallDone = true;
                     Debug.Log($"[ItemFovInteract] 통화 장면 {activeTimeline.time:0.0}초에서 멈추고 이어서 탐색합니다.");
@@ -367,7 +390,7 @@ public class ItemFovInteract : InteractableObject
                     else activeTimeline.Resume();
                 }
 
-                if (!segmentDone && activeTimeline.time >= freeRoamSegment.PauseTimelineAt)
+                if (!segmentDone && activeTimeline.time >= segmentPauseAt)
                 {
                     segmentDone = true;
                     Debug.Log($"[ItemFovInteract] 타임라인 {activeTimeline.time:0.0}초에서 멈추고 탐색 구간을 시작합니다.");
@@ -406,13 +429,6 @@ public class ItemFovInteract : InteractableObject
 
             if (delayAfterTimeline > 0f)
                 yield return new WaitForSeconds(delayAfterTimeline);
-        }
-
-        // 영상이 끝난 뒤에 묻는 추리 질문 (테이블로 돌아온 상태에서)
-        if (freeRoamSegment != null && freeRoamSegment.AsksDeductionAfterTimeline)
-        {
-            Debug.Log($"[ItemFovInteract] '{gameObject.name}' 추리 질문을 묻습니다.");
-            yield return freeRoamSegment.Deduction.Ask(null);
         }
 
         if (lens != null)

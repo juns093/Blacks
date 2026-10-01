@@ -24,12 +24,23 @@ public class OpponentPresenter : MonoBehaviour
     [Tooltip("5판에서 트레일 시체가 엎어져 있는 자리")]
     [SerializeField] private Transform corpsePoint;
 
+    [Header("조명 (비워도 됨)")]
+    [Tooltip("트레일과 할 때 옆에 서 있는 ???를 비추는 불빛")]
+    [SerializeField] private Light watchLight;
+    [Tooltip("5판에서 트레일의 시체를 비추는 불빛")]
+    [SerializeField] private Light corpseLight;
+
     [Header("이름표 (조준할 때 뜨는 월드 글자)")]
     [SerializeField] private Text opponentLabel;
     [SerializeField] private string whoLabel = "???";
     [SerializeField] private string trailLabel = "트레일";
 
     public Opponent Current { get; private set; } = Opponent.Who;
+
+    /// <summary>지금 맞은편에 앉은 사람의 몸</summary>
+    public SlumpableBody CurrentBody => Current == Opponent.Trail ? trailBody : whoBody;
+    public SlumpableBody WhoBody => whoBody;
+    public SlumpableBody TrailBody => trailBody;
 
     public static OpponentPresenter Instance { get; private set; }
 
@@ -71,6 +82,9 @@ public class OpponentPresenter : MonoBehaviour
                 trailBody.SetSlumpedInstant();
             }
         }
+
+        if (watchLight != null) watchLight.enabled = opponent == Opponent.Trail;
+        if (corpseLight != null) corpseLight.enabled = trailAlive == false;
 
         if (opponentLabel != null)
             opponentLabel.text = opponent == Opponent.Trail ? trailLabel : whoLabel;

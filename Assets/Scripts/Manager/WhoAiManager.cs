@@ -164,6 +164,13 @@ public class WhoAiManager : MonoBehaviour
             return true;
         }
 
+        // ???는 복수를 끝내기 전에는 자기 목숨으로 도박하지 않는다. (트레일은 도박한다)
+        if (OpponentPresenter.Instance == null || OpponentPresenter.Instance.Current == OpponentPresenter.Opponent.Who)
+        {
+            reason = "???는 확실한 빈 탄이 아니면 자기를 쏘지 않는다";
+            return false;
+        }
+
         // 2. 남은 탄이 전부 실탄 -> 자해는 곧 자살이므로 무조건 플레이어를 쏜다.
         if (blank == 0)
         {
@@ -276,6 +283,13 @@ public class WhoAiManager : MonoBehaviour
 
         // 연출 타임라인이 연결되어 있으면 먼저 재생하고 끝날 때까지 기다린다.
         PlayableDirector director = shootSelf ? shootSelfTimeline : shootPlayerTimeline;
+
+        // 플레이어를 쏠 때만: 맞은편 사람이 총을 직접 받아 들고 장전 → 조준한다.
+        // (자기를 쏠 때는 예전처럼 타임라인이 총을 움직인다)
+        OpponentGunHandler hands = shootSelf ? null : OpponentGunHandler.Current;
+        if (hands != null)
+            hands.BeginTurn(gun, shootSelf, director != null ? (float)director.duration
+                                                              : (shootSelf ? delayBeforeShotAtSelf : delayBeforeShotAtPlayer));
         if (director != null)
         {
             bool finished = false;
@@ -306,6 +320,7 @@ public class WhoAiManager : MonoBehaviour
 
         // 실제 발사: 탄약 소모 + 사운드 + 데미지 처리는 GunObject가 담당한다.
         bool wasLive = gun.FireAsWho(shootSelf);
+        if (hands != null) hands.OnFired(wasLive, shootSelf);
 
         // 타임라인이 옮겨 놓은 총을 원래 테이블 위치로 되돌린다.
         //

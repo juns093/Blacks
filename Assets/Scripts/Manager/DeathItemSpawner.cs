@@ -301,6 +301,11 @@ public class DeathItemSpawner : MonoBehaviour
     public IEnumerator PlayFragment(int fragmentIndex, int memoryIndex, int beforeDialogueGroup)
     {
         EnsureFragmentScreen();
+
+        // 총에 맞은 뒤 아이템을 누르기 전까지는 어지러운 환각이 계속된다.
+        DeathDistortion fx = DeathDistortion.Get();
+        fx.SetHallucination(true);
+
         if (!fragmentScreen.IsShowing)
             yield return fragmentScreen.Show(fragmentIndex, fragmentIndex);
 
@@ -308,6 +313,7 @@ public class DeathItemSpawner : MonoBehaviour
         while (fragmentScreen.IsShowing && !fragmentScreen.WasClicked)
             yield return null;
 
+        // 아이템 대사가 나오는 동안에도 환각은 이어지고, 대사가 끝나 기억으로 들어갈 때 정신이 돌아온다.
         if (memoryIndex >= 0)
         {
             var runnerObject = new GameObject($"MemoryFragment_{memoryIndex + 1}");
@@ -320,6 +326,7 @@ public class DeathItemSpawner : MonoBehaviour
                 thirdTimelineDialogueGroupIndex,
                 forthTimelineDialogueGroupIndex);
             runner.SetBeforeUseDialogueGroup(beforeDialogueGroup);
+            runner.SetOnBeforeUseDialogueDone(() => fx.SetHallucination(false));
             runner.SetAfterTimelineDialogueGroup(-1);
             runner.SetFreeRoamSegment(GetFreeRoamSegment(memoryIndex));
             runner.SetFilmGrainVolume(GetMemoryVolume(memoryIndex));
@@ -345,6 +352,9 @@ public class DeathItemSpawner : MonoBehaviour
                 yield return new WaitUntil(() => done);
             }
         }
+
+        // 대사만 있는 아이템이거나 기억이 중간에 끊겨도 환각이 남아 있지 않게
+        fx.SetHallucination(false);
 
         Debug.Log($"[DeathItemSpawner] 파편 {fragmentIndex + 1} 종료.");
     }

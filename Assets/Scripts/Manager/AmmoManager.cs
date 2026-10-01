@@ -46,6 +46,9 @@ public class AmmoManager : MonoBehaviour
     private List<bool> chamber = new List<bool>();
     private int currentIndex = 0;
 
+    // 테이블에 보여 줄 순서. 실제 발사 순서(chamber)와 따로 섞어서, 보이는 순서로 다음 탄을 알 수 없게 한다.
+    private List<bool> displayOrder = new List<bool>();
+
     [Tooltip("이번 라운드에 장전된 총알 총 개수 (읽기 전용, 자동 계산됨)")]
     public int TotalBullets { get; private set; }
 
@@ -134,6 +137,10 @@ public class AmmoManager : MonoBehaviour
         for (int i = 0; i < BlankRounds; i++) chamber.Add(false);
         Shuffle(chamber);
 
+        displayOrder.Clear();
+        displayOrder.AddRange(chamber);
+        Shuffle(displayOrder);
+
         currentIndex = 0;
 
         Debug.Log($"[AmmoManager] 장전 완료 - 총 {TotalBullets}발 (실탄 {LiveRounds} / 공탄 {BlankRounds})");
@@ -146,10 +153,13 @@ public class AmmoManager : MonoBehaviour
     {
         for (int i = list.Count - 1; i > 0; i--)
         {
-            int j = Random.Range(0, i + 1);
+            int j = rng.Next(i + 1);
             (list[i], list[j]) = (list[j], list[i]);
         }
     }
+
+    // UnityEngine.Random은 다른 연출들과 같은 흐름을 써서 판마다 비슷한 결과가 나오기 쉽다. 섞기는 따로 쓴다.
+    private static readonly System.Random rng = new System.Random(System.Guid.NewGuid().GetHashCode());
 
     // 다음 총알을 발사하고 실탄 여부(true=실탄, false=공탄)를 반환
     // 총알이 없으면 false를 반환하며 경고 로그를 남김 (호출 전에 RemainingBullets로 확인 권장)
@@ -176,7 +186,7 @@ public class AmmoManager : MonoBehaviour
         return isLive;
     }
 
-    // ── Bullet 타임라인 연출용: 장전된 총알(chamber) 순서대로 각 waypoint에 실탄/공탄 프리팹을 소환하고,
+    // ── Bullet 타임라인 연출용: 발사 순서와 따로 섞은 순서(displayOrder)로 각 waypoint에 실탄/공탄 프리팹을 소환하고,
     //    bulletShowDuration 후 소환된 것들을 전부 자동 제거 ──
     // Bullet 타임라인 안의 Signal Emitter(트랙)에 Signal Receiver를 붙여서
     // 이 메서드를 호출하도록 연결하면 됩니다. (또는 TimelineManager에서 bullet.Play() 시점에 직접 호출)
@@ -210,9 +220,9 @@ public class AmmoManager : MonoBehaviour
         // 혹시 이전에 소환된 게 남아있다면 정리 후 새로 소환
         ClearSpawnedBulletVisuals();
 
-        // 챔버(장전된 총알) 순서대로 설정된 위치 좌표에 실탄/공탄 프리팹을 배치
+        // 발사 순서와 상관없이 따로 섞은 순서로 설정된 위치 좌표에 실탄/공탄 프리팹을 배치
         // 총알 개수(TotalBullets)와 입력한 좌표 개수 중 더 작은 쪽까지만 소환
-        int count = Mathf.Min(chamber.Count, bulletPositions.Count);
+        int count = Mathf.Min(displayOrder.Count, bulletPositions.Count);
         if (count == 0)
         {
             Debug.LogWarning($"[AmmoManager] 소환할 총알이 없습니다. chamber.Count={chamber.Count}, " +
@@ -222,7 +232,7 @@ public class AmmoManager : MonoBehaviour
         for (int i = 0; i < count; i++)
         {
             Vector3 pos = bulletPositions[i];
-            bool isLive = chamber[i];
+            bool isLive = displayOrder[i];
             GameObject prefab = isLive ? liveBulletPrefab : blankBulletPrefab;
             if (prefab == null) continue;
 
@@ -269,11 +279,11 @@ public class AmmoManager : MonoBehaviour
 
         ClearSpawnedBulletVisuals();
 
-        int count = Mathf.Min(chamber.Count, bulletPositions.Count);
+        int count = Mathf.Min(displayOrder.Count, bulletPositions.Count);
         for (int i = 0; i < count; i++)
         {
             Vector3 pos = bulletPositions[i];
-            bool isLive = chamber[i];
+            bool isLive = displayOrder[i];
             GameObject prefab = isLive ? liveBulletPrefab : blankBulletPrefab;
             if (prefab == null) continue;
 

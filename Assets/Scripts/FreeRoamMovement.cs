@@ -15,6 +15,9 @@ public class FreeRoamMovement : MonoBehaviour
     [Tooltip("걷는 속도 (초당 유닛)")]
     [SerializeField] private float walkSpeed = 5.5f;
 
+    [Tooltip("Shift를 누르고 뛸 때 속도 (AllowSprint가 켜진 탐색 구간에서만)")]
+    [SerializeField] private float runSpeed = 9.5f;
+
     [Tooltip("중력 가속도. 바닥에 붙어 있게 해줍니다.")]
     [SerializeField] private float gravity = -9.81f;
 
@@ -65,6 +68,12 @@ public class FreeRoamMovement : MonoBehaviour
 
     public bool IsControlling => controlling;
 
+    /// <summary>Shift로 뛸 수 있는지. 탐색 구간마다 FlashbackFreeRoamSegment가 정한다.</summary>
+    public bool AllowSprint { get; set; }
+
+    /// <summary>지금 뛰고 있는지 (행인이 발소리를 듣는 데 씀)</summary>
+    public bool IsSprinting { get; private set; }
+
     /// <summary>문서를 읽는 동안 등, 카메라는 붙여 둔 채 이동과 시점만 멈출 때 씁니다.</summary>
     public bool InputPaused { get; set; }
 
@@ -85,6 +94,9 @@ public class FreeRoamMovement : MonoBehaviour
         transform.rotation = Quaternion.Euler(0f, yaw, 0f);
         head.localRotation = Quaternion.Euler(pitch, 0f, 0f);
     }
+
+    /// <summary>탐색 구간마다 다른 눈 높이 (0이면 eyeHeight). 맵마다 크기가 달라서 구간이 정해 준다.</summary>
+    public float EyeHeightOverride { get; set; }
 
     /// <summary>카메라 기준점. 소리 거리 계산 등에 씁니다.</summary>
     public Transform Head => head != null ? head : transform;
@@ -127,8 +139,8 @@ public class FreeRoamMovement : MonoBehaviour
             Debug.LogWarning("[FreeRoamMovement] 발밑에 바닥 콜라이더가 없습니다. 중력 없이 이 높이로 걷습니다. " +
                              "(맵에 바닥 콜라이더를 넣으면 자동으로 중력이 적용됩니다)");
 
-        float eye = eyeHeight > 0f
-            ? eyeHeight
+        float eye = EyeHeightOverride > 0f ? EyeHeightOverride
+            : eyeHeight > 0f ? eyeHeight
             : Mathf.Clamp(viewPos.y - groundY, eyeHeightRange.x, eyeHeightRange.y);
         head.localPosition = new Vector3(0f, eye, 0f);
 
@@ -159,10 +171,25 @@ public class FreeRoamMovement : MonoBehaviour
         SetLook(startYaw, 0f);
     }
 
+    /// <summary>다른 장소로 옮긴다. (암전 중에) 이후 ResetToStart는 이 자리로 돌아온다.</summary>
+    public void Teleport(Vector3 feet, float newYaw)
+    {
+        controller.enabled = false;
+        transform.position = feet;
+        controller.enabled = true;
+        verticalVelocity = Vector3.zero;
+        startFeetPosition = feet;
+        startYaw = newYaw;
+        hasGround = Physics.Raycast(feet + Vector3.up * 1f, Vector3.down, 5f, ~0, QueryTriggerInteraction.Ignore);
+        SetLook(newYaw, 0f);
+        ApplyToCamera();
+    }
+
     /// <summary>조작을 멈춥니다. 카메라는 더 이상 건드리지 않습니다.</summary>
     public void EndControl()
     {
         controlling = false;
+        IsSprinting = false;
         InputPaused = false;
         CameraShakeEuler = Vector3.zero;
         targetCamera = null;
@@ -171,7 +198,7 @@ public class FreeRoamMovement : MonoBehaviour
 
     private void Update()
     {
-        if (!controlling || InputPaused) return;
+        if (!controlling || InputPaused) { IsSprinting = false; return; }
 
         // ── 시점: 좌우는 몸 전체, 위아래는 머리만 ──
         yaw += Input.GetAxis("Mouse X") * mouseSensitivity;
@@ -187,6 +214,9 @@ public class FreeRoamMovement : MonoBehaviour
         if (move.sqrMagnitude > 1f)
             move.Normalize();
 
+        IsSprinting = AllowSprint && v > 0.1f && (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift));
+        float speed = IsSprinting ? runSpeed : walkSpeed;
+
         if (hasGround)
         {
             if (controller.isGrounded && verticalVelocity.y < 0f)
@@ -200,7 +230,7 @@ public class FreeRoamMovement : MonoBehaviour
         }
 
         Vector3 before = transform.position;
-        controller.Move((move * walkSpeed + verticalVelocity) * Time.deltaTime);
+        controller.Move((move * speed + verticalVelocity) * Time.deltaTime);
         UpdateFootsteps(before);
 
         // 맵 구멍으로 떨어지면 시작 위치로 되돌린다.
@@ -230,7 +260,7 @@ public class FreeRoamMovement : MonoBehaviour
         }
 
         stepAccum += delta.magnitude;
-        if (stepAccum < stepDistance) return;
+        if (stepAccum < (IsSprinting ? stepDistance * 1.35f : stepDistance)) return;
         stepAccum = 0f;
 
         if (footSource == null)

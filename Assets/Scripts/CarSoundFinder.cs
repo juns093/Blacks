@@ -32,6 +32,12 @@ public class CarSoundFinder : MonoBehaviour
     [Tooltip("E를 연타해도 소리가 겹치지 않도록 두는 최소 간격(초)")]
     [SerializeField] private float pingCooldown = 0.8f;
 
+    [Tooltip("경적 소리를 키우는 배율 (1보다 크면 원본보다 크게)")]
+    [SerializeField] private float pingGain = 2.6f;
+
+    [Tooltip("아무리 멀어도 이 볼륨 밑으로는 줄지 않는다")]
+    [Range(0f, 1f)] [SerializeField] private float minPingVolume = 0.2f;
+
     [Header("거리에 따른 볼륨")]
     [Tooltip("이 거리 이하로 가까워지면 최대 볼륨이 됩니다.")]
     [SerializeField] private float minFullVolumeDistance = 3f;
@@ -173,9 +179,10 @@ public class CarSoundFinder : MonoBehaviour
 
         float distance = CurrentDistance;
         float t = Mathf.InverseLerp(minFullVolumeDistance, maxHearDistance, distance);
-        float volume = Mathf.Clamp01(volumeByDistance.Evaluate(t));
+        float volume = Mathf.Max(minPingVolume, Mathf.Clamp01(volumeByDistance.Evaluate(t))) * pingGain;
 
         AudioClip clip = pingSound != null ? pingSound : GetProceduralHorn();
+        carAudio.volume = 1f;
         carAudio.PlayOneShot(clip, volume);
 
         Debug.Log($"[CarSoundFinder] 경적 - 거리 {distance:0.0}m -> 볼륨 {volume:0.00}");

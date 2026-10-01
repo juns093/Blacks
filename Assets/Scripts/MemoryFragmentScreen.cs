@@ -30,7 +30,7 @@ public class MemoryFragmentScreen : MonoBehaviour
     [SerializeField] private Vector3 stageOrigin = new Vector3(0f, -1000f, 0f);
 
     [Tooltip("아이템 하나의 크기 (가장 긴 변 기준, 월드 단위)")]
-    [SerializeField] private float itemSize = 0.8f;
+    [SerializeField] private float itemSize = 0.5f;
 
     [Tooltip("아이템 사이 간격 (중심 간 거리)")]
     [SerializeField] private float itemSpacing = 1.1f;
@@ -53,7 +53,7 @@ public class MemoryFragmentScreen : MonoBehaviour
 
     [Header("마우스 반응")]
     [Tooltip("마우스를 올렸을 때 커지는 배율")]
-    [SerializeField] private float hoverScale = 1.3f;
+    [SerializeField] private float hoverScale = 1.15f;
 
     [Tooltip("커지고 작아지는 속도")]
     [SerializeField] private float scaleSpeed = 12f;
@@ -222,7 +222,7 @@ public class MemoryFragmentScreen : MonoBehaviour
         while (t < punch)
         {
             t += Time.deltaTime;
-            SetSlotScale(newIndex, Mathf.Lerp(from, hoverScale * 1.35f, t / punch));
+            SetSlotScale(newIndex, Mathf.Lerp(from, hoverScale * 1.1f, t / punch));
             yield return null;
         }
 

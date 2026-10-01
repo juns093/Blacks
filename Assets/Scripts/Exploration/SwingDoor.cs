@@ -94,7 +94,8 @@ public class SwingDoor : MonoBehaviour
         AudioClip startClip = null, endClip = null;
         if (withSound)
         {
-            if (open) startClip = openSound != null ? openSound : ProceduralSfx.DoorCreak();
+            // 여는 소리는 내지 않는다. (닫힐 때만 쿵)
+            if (open) startClip = null;
             else endClip = closeSound != null ? closeSound : ProceduralSfx.DoorThud();
         }
         moveRoutine = StartCoroutine(MoveRoutine(open ? OpenRotation() : closedRotation, duration, startClip, endClip, 1f));

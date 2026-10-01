@@ -53,8 +53,25 @@ public class GameStateManager : MonoBehaviour
     // 5판(마지막 ???와의 판)이 시작될 때의 사망 횟수. (1~3판 ???, 4판 트레일, 5판 ???)
     private const int FinalRoundDeaths = 4;
 
-    [Tooltip("5판에서 ???를 죽였을 때, 추리 질문을 한 번에 맞힌 수가 이 이상이면 자수 엔딩, 아니면 괴물 엔딩")]
-    [SerializeField] private int confessionRequiredCorrect = 4;
+    [Tooltip("5판에서 ???를 죽였을 때, 기억 속에서 주운 문서(선택 단서)가 이 개수 이상이면 자수 엔딩, 아니면 괴물 엔딩")]
+    [SerializeField] private int confessionRequiredDocuments = 6;
+
+    // 자수 엔딩에 세는 문서들 (꼭 주워야 하는 열쇠/돈/차 키는 빼고, 둘러보며 찾는 선택 단서만)
+    private static readonly string[] DocumentClueIds =
+    {
+        "m1_card", "m1_news", "m1_schedule",
+        "m2_nurse", "m2_order",
+        "m3_log", "m3_roster", "m3_memo",
+        "m4_verdict"
+    };
+
+    private static int CountDocuments()
+    {
+        int n = 0;
+        foreach (string id in DocumentClueIds)
+            if (MemoryNotebook.Has(id)) n++;
+        return n;
+    }
 
     [Header("HP 설정")]
     [Tooltip("플레이어의 HP. 요구사항에 따라 1로 고정되어 있으며 변경할 수 없습니다.")]
@@ -351,15 +368,20 @@ public class GameStateManager : MonoBehaviour
             yield break;
         }
 
-        // 2) 짧은 환각 → 화면이 깨지듯 현재로
-        int hallucination = GetPlayerDeathDialogueIndex() ?? -1;
+        // 맞은 순간부터 아이템을 누를 때까지 어지러운 환각이 이어진다. (DeathItemSpawner가 끈다)
         fx.SetHallucination(true);
-        if (hallucination >= 0)
-            yield return PlayDialogue(hallucination);
-        yield return fx.Shatter();
 
-        if (deaths == 1) yield return PlayDialogue(StoryDialogueIndex.BackToPresent);
-        if (deaths == 4) yield return PlayDialogue(StoryDialogueIndex.AfterFourthDeath);
+        // 2) 1~3판은 환각 대사 없이 바로 위쪽 아이템으로 간다.
+        //    4판(트레일에게 죽음)만 짧은 환각 → 화면이 깨지듯 현재로
+        if (deaths == 4)
+        {
+            int hallucination = GetPlayerDeathDialogueIndex() ?? -1;
+            fx.SetHallucination(true);
+            if (hallucination >= 0)
+                yield return PlayDialogue(hallucination);
+            yield return fx.Shatter();
+            yield return PlayDialogue(StoryDialogueIndex.AfterFourthDeath);
+        }
 
         // 3) 화면 위쪽에 아이템이 뜬다 → 누르면 아이템 대사 → 그 기억
         OpponentPresenter presenter = OpponentPresenter.Instance;
@@ -395,7 +417,6 @@ public class GameStateManager : MonoBehaviour
             case 3:
                 // 암전 → 문이 열리고 트레일이 맞은편에 앉는다. ???는 옆에 서서 지켜본다.
                 yield return fx.FadeBlack(1f, 0.8f);
-                PlayOneShot2D(ProceduralSfx.DoorCreak(), 0.9f);
                 yield return new WaitForSeconds(0.9f);
                 if (presenter != null) presenter.SetStage(OpponentPresenter.Opponent.Trail, true);
                 yield return fx.FadeBlack(0f, 0.8f);
@@ -435,7 +456,7 @@ public class GameStateManager : MonoBehaviour
 
     // ── 상대 사망 ──
     //  맞은편 사람이 책상에 머리를 박으며 쓰러진다.
-    //  1~3판(???)  : 노이즈가 화면을 덮고 처음부터 다시 (감 익히는 판)
+    //  1~3판(???)  : 아무것도 기억 못 한 채 ???를 죽임 → 엔딩 1
     //  4판(트레일) : 엔딩 2
     //  5판(???)    : 추리 질문을 한 번에 맞힌 수에 따라 자수 엔딩 / 괴물 엔딩
     private IEnumerator WhoDeathRoutine()
@@ -480,9 +501,9 @@ public class GameStateManager : MonoBehaviour
         {
             yield return PlayDialogue(StoryDialogueIndex.WhoKilledFinal);
 
-            int correct = DeductionQuestion.FirstTryCorrectCount;
-            bool confess = correct >= confessionRequiredCorrect;
-            Debug.Log($"[GameStateManager] 추리 질문을 한 번에 맞힌 수 {correct}/{confessionRequiredCorrect} → {(confess ? "자수" : "괴물")} 엔딩");
+            int documents = CountDocuments();
+            bool confess = documents >= confessionRequiredDocuments;
+            Debug.Log($"[GameStateManager] 모은 문서 {documents}/{DocumentClueIds.Length} (자수 기준 {confessionRequiredDocuments}) → {(confess ? "자수" : "괴물")} 엔딩");
 
             if (confess)
             {
@@ -503,24 +524,14 @@ public class GameStateManager : MonoBehaviour
             yield break;
         }
 
-        // 1~3판: 노이즈가 화면을 덮고 처음부터 다시
-        if (glitchEffect != null)
-            glitchEffect.StartSound(whoDeathSoundRampDuration * 0.5f);
-        if (cameraGlitchEffect != null)
-            cameraGlitchEffect.Play(whoDeathGlitchFadeIn);
-        if (glitchEffect != null)
-        {
-            bool glitchDone = false;
-            glitchEffect.Play(whoDeathGlitchFadeIn, whoDeathGlitchHold, () => glitchDone = true);
-            yield return new WaitUntil(() => glitchDone);
-        }
-        else
-        {
-            yield return new WaitForSeconds(whoDeathGlitchFadeIn + whoDeathGlitchHold);
-        }
-
-        Debug.Log($"[GameStateManager] {deaths + 1}판에서 ???를 쐈다. 처음부터 다시 시작합니다.");
-        RestartFromBeginning();
+        // 1~3판: 아무것도 기억해 내지 못한 채 ???를 죽였다 → ENDING 1
+        Debug.Log($"[GameStateManager] {deaths + 1}판에서 ???를 죽였다. 엔딩 1.");
+        // 기억을 하나라도 본 뒤(2~3판)라면, ???가 쓰러진 채로 딸을 그리는 마지막 말을 남긴다.
+        if (deaths >= 1)
+            yield return PlayDialogue(StoryDialogueIndex.EndingOneDying);
+        yield return PlayDialogue(StoryDialogueIndex.EndingOne);
+        yield return fx.FadeBlack(1f, 1.5f);
+        yield return EndingCard.Show("ENDING 1", "아무것도 기억하지 못한 채");
     }
 
     // 대사 그룹 하나를 재생하고 끝날 때까지 기다린다.
@@ -672,9 +683,7 @@ public class GameStateManager : MonoBehaviour
         // 인스펙터에 저장된 옛 인덱스가 남아 있어도 무시하고 항상 상수로 덮어쓴다.
         loopIntroDialogueGroupIndexes = new List<int>
         {
-            StoryDialogueIndex.IntroMain,
-            StoryDialogueIndex.WhoKilledFirst,
-            StoryDialogueIndex.WhoKilledSecond
+            StoryDialogueIndex.IntroMain
         };
     }
 

@@ -50,6 +50,45 @@ public class DeathDistortion : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
+    private void OnEnable()
+    {
+        RenderPipelineManager.beginCameraRendering += OnBeginCamera;
+        RenderPipelineManager.endCameraRendering += OnEndCamera;
+    }
+
+    private void OnDisable()
+    {
+        RenderPipelineManager.beginCameraRendering -= OnBeginCamera;
+        RenderPipelineManager.endCameraRendering -= OnEndCamera;
+    }
+
+    // 환각 중에는 화면이 술 취한 듯 천천히 기울고 흔들린다.
+    // 카메라는 Cinemachine이 움직이므로, 그리는 순간에만 살짝 돌렸다가 끝나면 되돌린다.
+    private Camera swayedCamera;
+    private Quaternion swaySavedRotation;
+
+    private void OnBeginCamera(ScriptableRenderContext context, Camera cam)
+    {
+        float h = hallucination;
+        if (h < 0.001f || cam != Camera.main) return;
+
+        float t = Time.time;
+        float roll = (Mathf.Sin(t * 0.7f) * 4.5f + Mathf.Sin(t * 1.9f) * 1.2f) * h;
+        float yaw = Mathf.Sin(t * 0.45f + 1.3f) * 2.2f * h;
+        float pitch = Mathf.Sin(t * 0.6f + 0.4f) * 1.6f * h;
+
+        swayedCamera = cam;
+        swaySavedRotation = cam.transform.rotation;
+        cam.transform.rotation = swaySavedRotation * Quaternion.Euler(pitch, yaw, roll);
+    }
+
+    private void OnEndCamera(ScriptableRenderContext context, Camera cam)
+    {
+        if (cam != swayedCamera || cam == null) return;
+        cam.transform.rotation = swaySavedRotation;
+        swayedCamera = null;
+    }
+
     private void Build()
     {
         volume = gameObject.AddComponent<Volume>();
@@ -91,13 +130,15 @@ public class DeathDistortion : MonoBehaviour
         hallucination = Mathf.MoveTowards(hallucination, hallucinationTarget, Time.deltaTime * 0.8f);
         spike = Mathf.MoveTowards(spike, 0f, Time.deltaTime / Mathf.Max(0.1f, hitDuration));
 
-        float wobble = Mathf.Sin(Time.time * 1.7f) * 0.12f + Mathf.Sin(Time.time * 3.1f) * 0.05f;
+        float wobble = Mathf.Sin(Time.time * 1.7f) * 0.22f + Mathf.Sin(Time.time * 3.1f) * 0.08f;
+        float breathe = 0.5f + 0.5f * Mathf.Sin(Time.time * 0.9f);
         float h = hallucination;
         float s = spike;
 
-        lens.intensity.value = Mathf.Clamp(-0.25f * h + wobble * h - 0.7f * s, -1f, 1f);
-        lens.scale.value = 1f - 0.08f * s;
-        chroma.intensity.value = Mathf.Clamp01(0.45f * h + s);
+        // 일렁이는 렌즈 + 숨 쉬듯 줌 + 번지는 색수차 → 어지러움
+        lens.intensity.value = Mathf.Clamp(-0.3f * h + wobble * h - 0.7f * s, -1f, 1f);
+        lens.scale.value = 1f - 0.08f * s - 0.05f * h * breathe;
+        chroma.intensity.value = Mathf.Clamp01((0.55f + 0.35f * breathe) * h + s);
         color.saturation.value = -55f * h - 80f * s;
         color.postExposure.value = -0.4f * h - 1.4f * s;
         color.colorFilter.value = Color.Lerp(Color.white, new Color(1f, 0.82f, 0.78f), Mathf.Max(h * 0.6f, s));

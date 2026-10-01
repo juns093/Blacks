@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.Rendering;
@@ -71,6 +72,9 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
     [Tooltip("이 구간에서 손전등(F키)을 쓸지 여부")]
     [SerializeField] private bool useFlashlight = false;
 
+    [Tooltip("켜면 Shift로 뛸 수 있다. (뛰면 행인이 발소리를 듣는다)")]
+    [SerializeField] private bool allowSprint = false;
+
     [Header("탐색 중 화면 밝기")]
     [Tooltip("테이블 장면용 화면 보정(노출 -2.67, 대비 75)은 걸어 다니기엔 너무 어둡다. " +
              "켜면 탐색하는 동안에만 아래 값으로 바꿨다가 끝나면 되돌립니다.")]
@@ -87,6 +91,9 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
     [SerializeField] private AudioClip ringClip;
     [Range(0f, 1f)] [SerializeField] private float ringVolume = 0.8f;
     [TextArea] [SerializeField] private string exploreHint = "주변을 둘러보자";
+    [Tooltip("켜면: 주변 단서(선택 단서)를 전부 모아야 전화가 울린다. (callTrigger 대신)")]
+    [SerializeField] private bool callAfterClues = false;
+    [TextArea] [SerializeField] private string collectHint = "역을 둘러보며 단서를 모으세요  ({0}/{1})";
     [TextArea] [SerializeField] private string callHint = "전화가 울린다";
     [SerializeField] private string callPrompt = "[E] 전화 받기";
 
@@ -97,6 +104,15 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
     [SerializeField] private float afterCallPauseAt = 6f;
     [Tooltip("탐색이 끝나면 영상을 이어 틀 시점(초). (테이블로 돌아가는 전환 구간)")]
     [SerializeField] private float afterCallResumeAt = 45.57f;
+    [Tooltip("통화 뒤 먼저 역 밖으로 나가는 곳 (계단 위 등). 비워두면 바로 자료 찾기.")]
+    [SerializeField] private Transform afterCallExitSpot;
+    [SerializeField] private float afterCallExitRadius = 3f;
+    [TextArea] [SerializeField] private string afterCallExitHint = "역 밖으로 나가세요";
+    [Tooltip("역 밖으로 나가야 할 때만 켜지는 표시 (출구 쪽 불빛 등)")]
+    [SerializeField] private GameObject afterCallExitMarker;
+    [Tooltip("역 밖으로 나가면 암전 후 이 자리(발밑, 방향)에서 다시 걷는다.")]
+    [SerializeField] private Transform afterCallOutsideStart;
+
     [Tooltip("찾아야 할 것 (화장실에 둔 사건 자료 등, [E])")]
     [SerializeField] private InteractSpot afterCallInteract;
     [TextArea] [SerializeField] private string afterCallHint = "화장실에 두고 갔다는 자료를 찾으세요";
@@ -125,6 +141,9 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
     [Header("선택 단서 (주우면 기억 노트에 적힘, 안 주워도 진행 가능)")]
     [SerializeField] private FreeRoamPickupItem[] optionalClues;
     [SerializeField] private InteractSpot[] resetOnStart;
+
+    [Tooltip("이 구간에서 쓸 눈 높이 (0이면 플레이어 기본값). 병원처럼 맵이 크게 만들어진 곳은 높여야 한다.")]
+    [SerializeField] private float eyeHeight = 0f;
 
     [Header("목격자 (들키면 처음 자리에서 다시)")]
     [SerializeField] private WitnessPatrol[] witnesses;
@@ -190,6 +209,12 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
     [Tooltip("시동 + 출발 소리. 비워두면 코드로 만든 소리(약 4초)를 씁니다.")]
     [SerializeField] private AudioClip carEngineSound;
 
+    [Tooltip("시동이 걸린 뒤 이어지는 엔진(주행) 소리. 비워두면 시동 소리만 냅니다.")]
+    [SerializeField] private AudioClip carDriveSound;
+
+    [Tooltip("주행 소리를 들려주는 시간(초). 이 동안 서서히 작아집니다.")]
+    [SerializeField] private float carDriveDuration = 4.5f;
+
     [Range(0f, 1f)]
     [SerializeField] private float carSoundVolume = 0.9f;
 
@@ -228,8 +253,15 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
     /// <summary>
     /// 대본 파일(GameSceneStoryDialogues)에서 안내 문구를 채울 때 씁니다. null인 항목은 그대로 둡니다.
     /// </summary>
-    public void SetAfterCallTexts(string find = null, string back = null)
+    public void SetCollectHint(string hint, bool callOnlyAfterClues = true)
     {
+        if (hint != null) collectHint = hint;
+        callAfterClues = callOnlyAfterClues;
+    }
+
+    public void SetAfterCallTexts(string find = null, string back = null, string exit = null)
+    {
+        if (exit != null) afterCallExitHint = exit;
         if (find != null) afterCallHint = find;
         if (back != null) afterCallReturnHint = back;
     }
@@ -355,7 +387,9 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
             cam.transform.SetPositionAndRotation(playerStartPoint.position + Vector3.up * 1.65f, playerStartPoint.rotation);
 
         player.gameObject.SetActive(true);
+        player.EyeHeightOverride = eyeHeight;
         player.BeginControl(cam);
+        player.AllowSprint = allowSprint;
 
         FreeRoamFlashlight flashlight = player.GetComponent<FreeRoamFlashlight>();
         if (useFlashlight && flashlight == null)
@@ -374,6 +408,8 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
         string controls = controlsHint;
         if (useFlashlight && !string.IsNullOrEmpty(controls) && !controls.Contains("손전등"))
             controls += "  /  F 손전등";
+        if (allowSprint && !string.IsNullOrEmpty(controls) && !controls.Contains("Shift"))
+            controls += "  /  Shift 달리기";
         ObjectiveHUD.Instance.ShowControls(controls);
 
         // 선택 단서 / 상호작용 지점 / 목격자 준비
@@ -389,10 +425,37 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
         //  둘러보다가 지정한 곳 근처에 오면 전화벨 → [E]로 받으면 구간이 끝나고 영상(통화 장면)으로 넘어간다.
         if (pocketCall && !completeRequested)
         {
-            SetStep(exploreHint);
-            if (callTrigger != null)
-                yield return new WaitUntil(() => completeRequested ||
-                    FlatDistance(player.transform.position, callTrigger.position) <= callTriggerRadius);
+            int clueTotal = 0;
+            if (callAfterClues && optionalClues != null)
+                foreach (var c in optionalClues) if (c != null) clueTotal++;
+
+            if (clueTotal > 0)
+            {
+                // 단서를 전부 모으면 그때 전화가 울린다.
+                SetWaypoints(() => NotPicked(optionalClues));
+                int shown = -1;
+                while (!completeRequested)
+                {
+                    int found = 0;
+                    foreach (var c in optionalClues) if (c != null && c.IsPicked) found++;
+                    if (found != shown)
+                    {
+                        shown = found;
+                        SetStep(collectHint.Replace("{0}", found.ToString()).Replace("{1}", clueTotal.ToString()));
+                    }
+                    if (found >= clueTotal) break;
+                    yield return null;
+                }
+                // 마지막 단서 문구를 읽을 시간
+                if (!completeRequested) yield return new WaitForSeconds(1.5f);
+            }
+            else
+            {
+                SetStep(exploreHint);
+                if (callTrigger != null)
+                    yield return new WaitUntil(() => completeRequested ||
+                        FlatDistance(player.transform.position, callTrigger.position) <= callTriggerRadius);
+            }
 
             AudioSource ring = EnsureSfx();
             ring.clip = ringClip != null ? ringClip : ProceduralSfx.PhoneRing();
@@ -401,6 +464,7 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
             ring.Play();
             Debug.Log("[FlashbackFreeRoamSegment] 전화가 울린다.");
 
+            SetWaypoints(null);
             SetStep(callHint);
             ObjectiveHUD.Instance.SetPrompt(callPrompt);
             yield return new WaitUntil(() => completeRequested || (!player.InputPaused && Input.GetKeyDown(KeyCode.E)));
@@ -420,6 +484,7 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
         if (requiredInteract != null && !completeRequested)
         {
             SetStep(interactHint);
+            SetWaypoints(() => requiredInteract.Used ? null : One(requiredInteract.transform));
             yield return new WaitUntil(() => requiredInteract.Used || completeRequested);
         }
 
@@ -428,6 +493,7 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
         {
             pickupItem.Arm(player.transform);
             SetStep(pickupHint);
+            SetWaypoints(() => pickupItem.IsPicked ? null : One(pickupItem.transform));
             yield return new WaitUntil(() => pickupItem.IsPicked || completeRequested);
             if (pickupItem.IsPicked)
             {
@@ -444,6 +510,7 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
                 if (clue != null) { clue.Arm(player.transform); total++; }
 
             // 직전 프레임까지 주웠던 단서. 새로 주운 것을 골라 그 문구를 보여주기 위해 기억해 둔다.
+            SetWaypoints(() => NotPicked(clueItems));
             var seen = new bool[clueItems.Length];
             int shown = -1;
             while (!completeRequested)
@@ -473,7 +540,10 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
 
         // ── 목표 3: 증거 조작 (순서 무관) ──
         if (HasEvidence && !completeRequested)
+        {
+            SetWaypoints(NotTampered);
             yield return EvidenceStepRoutine();
+        }
 
         // ── 목표 4: 차 찾기 (위치는 매 판 무작위) ──
         bool carFound = false;
@@ -483,6 +553,7 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
         {
             carFinder.OnCarFound += HandleFound;
             carFinder.BeginSearch();
+            SetWaypoints(null);
             SetStep(searchHint);
 
             yield return new WaitUntil(() => carFound || completeRequested);
@@ -496,29 +567,25 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
         if (finalSpot != null && !completeRequested && !carFound)
         {
             SetStep(finalHint);
+            SetWaypoints(() => One(finalSpot));
             yield return new WaitUntil(() => completeRequested || FlatDistance(player.transform.position, finalSpot.position) <= finalSpotRadius);
             reachedFinal = !completeRequested;
             if (reachedFinal) Debug.Log("[FlashbackFreeRoamSegment] 마지막 장소에 도착했습니다.");
         }
 
-        // 목격자는 여기서 멈춘다. (추리 질문 중에 들키면 안 된다)
+        EndWaypoints();
+
+        // 목격자는 여기서 멈춘다. (영상으로 넘어가는 동안 들키면 안 된다)
         WitnessPatrol.OnCaught -= HandleCaught;
         StopCoroutine(caughtWatcher);
         if (witnesses != null) foreach (var w in witnesses) if (w != null) w.Disarm();
-
-        // ── 마지막: 추리 질문 (영상 뒤에 묻는 설정이면 여기서는 건너뜀) ──
-        if (deduction != null && !deductionAfterTimeline && !completeRequested)
-        {
-            ObjectiveHUD.Instance.SetObjective("기억을 맞춰 보자");
-            ObjectiveHUD.Instance.SetPrompt(null);
-            yield return deduction.Ask(player);
-        }
 
         // 목표가 없으면 외부 호출을 기다린다.
         if (!HasAnyGoal)
             yield return new WaitUntil(() => completeRequested);
 
         // ── 마무리 연출 ──
+        player.AllowSprint = false;
         player.EndControl();
         if (flashlight != null) flashlight.SetAvailable(false);
 
@@ -564,6 +631,7 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
             CamMove.Instance.SyncRotation();
 
         Debug.Log($"[FlashbackFreeRoamSegment] '{name}' 탐색 구간을 종료합니다.");
+        EndWaypoints();
         IsRunning = false;
         completeRequested = false;
 
@@ -614,7 +682,9 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
         if (hasCallPosition)
             cam.transform.SetPositionAndRotation(callFeetPosition + Vector3.up * 1.65f, Quaternion.Euler(0f, callYaw, 0f));
         player.gameObject.SetActive(true);
+        player.EyeHeightOverride = eyeHeight;
         player.BeginControl(cam);
+        player.AllowSprint = allowSprint;
 
         FreeRoamFlashlight flashlight = player.GetComponent<FreeRoamFlashlight>();
         if (useFlashlight && flashlight == null)
@@ -630,10 +700,32 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
         if (afterCallInteract != null) { afterCallInteract.ResetState(); afterCallInteract.enabled = true; }
         if (afterCallScare != null) afterCallScare.ResetState();
 
+        // ── 역 밖으로 → 암전 → 바깥(공중화장실 앞)에서 다시 걷기 ──
+        if (afterCallExitSpot != null && afterCallOutsideStart != null && !completeRequested)
+        {
+            SetStep(afterCallExitHint);
+            SetWaypoints(() => One(afterCallExitSpot));
+            if (afterCallExitMarker != null) afterCallExitMarker.SetActive(true);
+            yield return new WaitUntil(() => completeRequested ||
+                Vector3.Distance(player.transform.position, afterCallExitSpot.position) <= afterCallExitRadius);
+            if (afterCallExitMarker != null) afterCallExitMarker.SetActive(false);
+
+            if (!completeRequested)
+            {
+                player.InputPaused = true;
+                StartFade(1f, 0.6f, 0);
+                yield return new WaitForSeconds(0.7f);
+                player.Teleport(afterCallOutsideStart.position, afterCallOutsideStart.eulerAngles.y);
+                player.InputPaused = false;
+                StartFade(0f, 0.8f, 0);
+            }
+        }
+
         // ── 자료 찾기 ──
         if (afterCallInteract != null)
         {
             SetStep(afterCallHint);
+            SetWaypoints(() => afterCallInteract.Used ? null : One(afterCallInteract.transform));
             yield return new WaitUntil(() => afterCallInteract.Used || completeRequested);
         }
 
@@ -642,6 +734,7 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
         {
             if (afterCallScare != null) afterCallScare.Arm();
             SetStep(afterCallReturnHint);
+            SetWaypoints(() => One(afterCallReturnSpot));
             yield return new WaitUntil(() => completeRequested ||
                 ((afterCallScare == null || afterCallScare.Done) &&
                  (afterCallReturnSpot == null || FlatDistance(player.transform.position, afterCallReturnSpot.position) <= afterCallReturnRadius)));
@@ -649,6 +742,7 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
 
         // ── 마무리: 암전 → 조작 반납 ──
         if (afterCallInteract != null) afterCallInteract.enabled = false;
+        player.AllowSprint = false;
         player.EndControl();
         if (flashlight != null) flashlight.SetAvailable(false);
         HideHint();
@@ -664,6 +758,7 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
         if (CamMove.Instance != null) CamMove.Instance.SyncRotation();
 
         Debug.Log($"[FlashbackFreeRoamSegment] '{name}' 통화 뒤 탐색을 종료합니다.");
+        EndWaypoints();
         IsRunning = false;
         completeRequested = false;
         StartFade(0f, fadeInDuration, 1);
@@ -771,7 +866,13 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
 
     // ── 목격자에게 들켰을 때: 암전 → 시작 자리로 → 모은 것(필수 단서)을 원래 자리로 ──
     private bool caughtPending;
-    private void HandleCaught(WitnessPatrol who) => caughtPending = true;
+    private WitnessPatrol caughtBy;
+    private void HandleCaught(WitnessPatrol who)
+    {
+        if (caughtPending) return;
+        caughtPending = true;
+        caughtBy = who;
+    }
 
     private IEnumerator CaughtWatcher()
     {
@@ -779,6 +880,19 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
         {
             if (caughtPending)
             {
+                // 행인: "뭐해요?" → 변명 (반반). 통하면 그냥 지나간다.
+                bool excused = false;
+                if (caughtBy != null)
+                    yield return WitnessConfrontation.Get().Run(player, caughtBy, ok => excused = ok);
+                caughtBy = null;
+
+                if (excused)
+                {
+                    caughtPending = false;
+                    yield return null;
+                    continue;
+                }
+
                 caughtPending = false;
                 player.InputPaused = true;
                 ShowMessage(caughtHint);
@@ -803,6 +917,43 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
     }
 
     // ── 안내 문구 ──
+    // ── 목표 위치 표시 (화면 위 노란 마름모 + 거리) ──
+    private System.Func<IEnumerable<Transform>> waypointSource;
+
+    private void SetWaypoints(System.Func<IEnumerable<Transform>> source) => waypointSource = source;
+
+    private void LateUpdate()
+    {
+        if (!IsRunning) return;
+        if (waypointSource == null || player == null || !player.IsControlling || player.InputPaused)
+            WaypointHUD.Hide();
+        else
+            WaypointHUD.Show(waypointSource());
+    }
+
+    private static IEnumerable<Transform> One(Transform t)
+    {
+        if (t != null) yield return t;
+    }
+
+    private static IEnumerable<Transform> NotPicked(FreeRoamPickupItem[] items)
+    {
+        if (items == null) yield break;
+        foreach (var i in items) if (i != null && !i.IsPicked) yield return i.transform;
+    }
+
+    private IEnumerable<Transform> NotTampered()
+    {
+        if (evidenceItems == null) yield break;
+        foreach (var e in evidenceItems) if (e != null && !e.IsTampered) yield return e.transform;
+    }
+
+    private void EndWaypoints()
+    {
+        waypointSource = null;
+        WaypointHUD.Hide();
+    }
+
     // 지금 단계의 목표. 왼쪽 위에 뜬다.
     private void SetStep(string hint)
     {
@@ -865,10 +1016,38 @@ public class FlashbackFreeRoamSegment : MonoBehaviour
 
         source.PlayOneShot(engine, carSoundVolume);
 
-        // 화면이 다 어두워지고, 엔진 소리가 멀어져 사라질 때까지 기다린다.
-        float waitEngine = engine.length;
+        // 시동 소리 → 엔진 소리가 이어지다가 멀어지며 사라진다.
         float waitFade = Mathf.Max(0f, fadeOutDuration - engineDelayAfterDoor);
-        yield return new WaitForSeconds(Mathf.Max(waitEngine, waitFade) + holdBlackAfterEngine);
+        if (carDriveSound != null)
+        {
+            yield return new WaitForSeconds(Mathf.Max(0f, engine.length - 0.4f));
+            var drive = gameObject.AddComponent<AudioSource>();
+            drive.playOnAwake = false;
+            drive.spatialBlend = 0f;
+            drive.clip = carDriveSound;
+            drive.volume = 0f;
+            drive.Play();
+            float dur = Mathf.Min(carDriveDuration, carDriveSound.length);
+            float t = 0f;
+            while (t < dur)
+            {
+                t += Time.deltaTime;
+                float k = t / dur;
+                // 0.4초 동안 올라왔다가 끝으로 갈수록 작아진다.
+                float up = Mathf.Clamp01(t / 0.4f);
+                drive.volume = carSoundVolume * up * (1f - k * k);
+                yield return null;
+            }
+            drive.Stop();
+            Destroy(drive);
+            yield return new WaitForSeconds(holdBlackAfterEngine);
+        }
+        else
+        {
+            // 화면이 다 어두워지고, 엔진 소리가 멀어져 사라질 때까지 기다린다.
+            float waitEngine = engine.length;
+            yield return new WaitForSeconds(Mathf.Max(waitEngine, waitFade) + holdBlackAfterEngine);
+        }
     }
 
     private AudioSource EnsureSfx()

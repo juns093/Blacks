@@ -8,7 +8,7 @@ using UnityEngine.UI;
 //  - 중요한 문장이면 빨간 줄이 그어지고, 아니면 "이건 중요하지 않아" 하고 흔들린다.
 //  - 중요한 문장을 전부 그으면 닫힌다. 그은 문장은 기억 노트에 적힌다. (InteractSpot이 처리)
 //  - (선택) 중요한 문장을 몇 개 그은 뒤, 갑자기 문을 쾅쾅 두드리는 소리로 놀래킨다. (소리 점프 스퀘어)
-//    이어서 대사(역무원: "역 마감합니다" / 나: "잠시만요")가 나오고, 남은 줄을 마저 긋는다.
+//    이어서 대사(관리인: "화장실 마감합니다" / 나: "잠시만요")가 나오고, 남은 줄을 마저 긋는다.
 // 내용은 SetContent로 넣는다. 문장 앞에 '*'를 붙이면 중요한 문장이다.
 public class UnderlineDocument : MonoBehaviour
 {
@@ -32,7 +32,7 @@ public class UnderlineDocument : MonoBehaviour
     [Tooltip("두드리기 전 정적(초)")]
     [SerializeField] private float silenceBeforeKnock = 1.1f;
     [Tooltip("두드린 뒤 나오는 대사 (\"이름: 대사\" 또는 그냥 대사)")]
-    [SerializeField] private string[] interruptLines = { "역무원: 아저씨! 역 마감합니다. 나오셔야 해요!", "잠, 잠시만요...!" };
+    [SerializeField] private string[] interruptLines = { "관리인: 아저씨! 화장실 마감합니다. 나오셔야 해요!", "잠, 잠시만요...!" };
     [SerializeField] private string warningText = "[주의] 곧 깜짝 놀랄 수 있는 소리가 나옵니다";
 
     private GameObject canvasObject;

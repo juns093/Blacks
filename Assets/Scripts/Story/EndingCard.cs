@@ -57,6 +57,18 @@ public class EndingCard : MonoBehaviour
 
         yield return new WaitForSeconds(holdDuration);
 
+        // 엔딩 이름이 사라지고 크레딧
+        t = 0f;
+        while (t < 1f)
+        {
+            t += Time.deltaTime;
+            float a = 1f - Mathf.Clamp01(t);
+            titleText.color = new Color(0.85f, 0.85f, 0.85f, a);
+            subText.color = new Color(0.7f, 0.2f, 0.18f, a);
+            yield return null;
+        }
+        yield return CreditsRoll.Run();
+
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
         CamMove.blockLook = false;

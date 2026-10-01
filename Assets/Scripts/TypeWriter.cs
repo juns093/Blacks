@@ -376,6 +376,14 @@ public class TypeWriter : MonoBehaviour
     // ── 코루틴: 한 글자씩 출력 → 딜레이 → 자동 다음 대사 (배열 기반 재생용) ──
     private IEnumerator TypeAndAdvance(string fullText)
     {
+        // '@'로 시작하는 줄은 글자가 아니라 연출 신호 (예: "@focus gun" = 총 쪽으로 렌즈를 당긴다)
+        if (DialogueCues.IsCue(fullText))
+        {
+            yield return DialogueCues.Run(fullText);
+            AdvanceAfterLine();
+            yield break;
+        }
+
         isTyping = true;
         isWaitingDelay = false;
         skipRequested = false;
@@ -421,16 +429,25 @@ public class TypeWriter : MonoBehaviour
 
         isWaitingDelay = false;
 
-        // 다음 대사로
+        AdvanceAfterLine();
+    }
+
+    // 다음 대사로. 마지막이면 당겨 둔 카메라를 되돌린 뒤 끝낸다.
+    private void AdvanceAfterLine()
+    {
         currentIndex++;
         if (currentDialogues != null && currentIndex < currentDialogues.Length)
-        {
             ShowDialogue(currentIndex);
-        }
+        else if (DialogueCues.IsFocused)
+            typingCoroutine = StartCoroutine(FinishAfterCameraReturn());
         else
-        {
             OnAllDialoguesFinished();
-        }
+    }
+
+    private IEnumerator FinishAfterCameraReturn()
+    {
+        yield return DialogueCues.Release();
+        OnAllDialoguesFinished();
     }
 
     // ── 코루틴: 한 글자씩 출력만 하고, 끝나면 바로 완료 처리 (자동 다음 넘김 없음) ──

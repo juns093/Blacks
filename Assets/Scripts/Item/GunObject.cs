@@ -151,6 +151,12 @@ public class GunObject : InteractableObject
              "섬광이 터지는 도중에 총이 움직이면 빛이 같이 끌려다녀서 어색합니다.")]
     [SerializeField] private float returnDelayAfterMuzzleFlash = 0.15f;
 
+    [Tooltip("Who가 쏜 뒤 총을 테이블로 되돌리는 시간(초). 너무 짧으면 총이 휙 날아가 보인다.")]
+    [SerializeField] private float whoReturnDuration = 1.1f;
+
+    [Tooltip("Who가 총을 되돌릴 때 살짝 들어 올리는 높이 (테이블을 뚫고 지나가지 않게)")]
+    [SerializeField] private float whoReturnArcHeight = 0.35f;
+
     // 총이 테이블 위(OnTable)가 아닌 상태(Selecting/Aiming)인지 여부.
     // 아이템 시스템(ItemInteract)이 "총을 든 동안 아이템 사용 불가"를 체크하는 데 사용합니다.
     public static bool IsGunHeld { get; private set; } = false;
@@ -770,6 +776,13 @@ public class GunObject : InteractableObject
     {
         suppressBasePositionLerp = true;
 
+        // 빈 탄으로 차례가 이어지면 지난 차례의 "내려놓기"가 아직 대기 중일 수 있다. 취소하고 손에 든 채 이어 간다.
+        if (whoReturnCoroutine != null)
+        {
+            StopCoroutine(whoReturnCoroutine);
+            whoReturnCoroutine = null;
+        }
+
         // 되돌리기 중에 껐던 Animator를 다시 켜야 타임라인이 총을 움직일 수 있다.
         if (selfAnimator != null)
             selfAnimator.enabled = true;
@@ -796,6 +809,9 @@ public class GunObject : InteractableObject
     /// 플레이어가 맞아서 hitted 타임라인이 시작된 경우에는 false를 넘겨서
     /// 총 복귀가 연출을 기다리지 않고 동시에 진행되게 합니다.
     /// </param>
+    /// <summary>Who가 쏜 뒤 총을 테이블로 되돌리기 시작하는 순간</summary>
+    public static event System.Action WhoReturnStarted;
+
     public void ReturnToTableAfterWhoShot(float delay = 0f, bool waitForMuzzleFlash = true)
     {
         if (whoReturnCoroutine != null)
@@ -850,15 +866,25 @@ public class GunObject : InteractableObject
             ? originalParent.rotation * originalLocalRot
             : originalLocalRot;
 
-        Debug.Log($"[GunObject] Who의 발사 연출이 끝나 총을 원래 위치로 되돌립니다 ({returnDuration:0.00}초)");
+        // 맞은편 사람이 손에 들고 있던 총을 이제 놓는다. (OpponentGunHandler가 듣고 팔을 내린다)
+        WhoReturnStarted?.Invoke();
 
+        float duration = Mathf.Max(returnDuration, whoReturnDuration);
+        Debug.Log($"[GunObject] Who의 발사 연출이 끝나 총을 원래 위치로 되돌립니다 ({duration:0.00}초)");
+
+        // 사람이 내려놓듯: 천천히 출발 → 살짝 들어 올린 채 옮기고 → 부드럽게 내려앉는다.
+        // 회전은 위치보다 조금 먼저 끝나서 총이 내려앉을 때는 이미 눕혀져 있다.
         float elapsed = 0f;
-        while (elapsed < returnDuration)
+        while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
-            float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / returnDuration));
-            transform.position = Vector3.Lerp(startPos, destWorldPos, t);
-            transform.rotation = Quaternion.Slerp(startRot, destWorldRot, t);
+            float k = Mathf.Clamp01(elapsed / duration);
+            float t = k * k * k * (k * (k * 6f - 15f) + 10f); // smootherstep
+            float r = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(k / 0.8f));
+            Vector3 pos = Vector3.Lerp(startPos, destWorldPos, t);
+            pos.y += Mathf.Sin(t * Mathf.PI) * whoReturnArcHeight;
+            transform.position = pos;
+            transform.rotation = Quaternion.Slerp(startRot, destWorldRot, r);
             yield return null;
         }
 
